@@ -1,0 +1,92 @@
+# Keyword
+- #version
+- const
+- if
+- while
+- do
+- for
+- break
+- continue
+- return
+- uniform
+- in
+- out
+- layout
+- location
+- binding
+- TYPE
+  - void
+  - bool
+  - int
+  - uint
+  - float
+  - double
+  - vec2
+  - vec3
+  - vec4
+  - dvec2
+  - dvec3
+  - dvec4
+  - bvec2
+  - bvec3
+  - bvec4
+  - ivec2
+  - ivec3
+  - ivec4
+  - uvec2
+  - uvec3
+  - uvec4
+  - mat2
+  - mat3
+  - mat4
+
+# Identifier
+- identifier
+
+# Literal
+- Number
+
+# Operator
+- { }
+- ( )
+- \[ ]
+- ++
+- \--
+- \+
+- \-
+- \~
+- \!
+- \*
+- /
+- <<
+- \>>
+- \>=
+- <=
+- \>
+- <
+- ==
+- !=
+- &
+- ^
+- |
+- &&
+- ^
+- ||
+- +=
+- -=
+- *=
+- /=
+- %=
+- <<=
+- \>>=
+- ||=
+- &&=
+- |=
+- &=
+- =
+
+# DonKnow
+- ;      top level
+- :
+- ?
+- ,
