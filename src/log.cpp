@@ -9,12 +9,12 @@
 
 using namespace ast;
 
-std::unique_ptr<ExprAST> error(const char *Str) {
+std::unique_ptr<ExpressionAST> error(const char *Str) {
     fprintf(stderr, "Error: %s\n", Str);
     return nullptr;
 }
 
-std::unique_ptr<PrototypeAST> errorP(const char *Str){
+std::unique_ptr<FunctionPrototypeAST> errorP(const char *Str){
     error(Str);
     return nullptr;
 };

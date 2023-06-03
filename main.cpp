@@ -5,11 +5,17 @@
 #include "parser.h"
 #include "tokenizer.h"
 
+extern std::unique_ptr<TopLevelAST> topLevelAst;
+
 int main() {
   initBinopPrecedence();
-  redirectStream("/home/geraltigas/compilerCourse/llvm16/llvm/GLSL/temp.glsl");
-  getNextToken();
+  redirectInput("/home/geraltigas/compilerCourse/llvm16/llvm/GLSL/temp.glsl");
+  rediectOutput("/home/geraltigas/compilerCourse/llvm16/llvm/GLSL/tempAst.json");
+  Tokenize();
+  //printTokens();
   InitializeModule();
-  MainLoop();
-  TheModule->print(errs(), nullptr);
+  parseAST();
+  std::cout << topLevelAst->toString() << std::endl;
+  //LOG_EXPR(topLevelAst)
+  //TheModule->print(errs(), nullptr);
 }

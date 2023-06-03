@@ -8,9 +8,9 @@
 #include "ast.h"
 
 using namespace ast;
-std::unique_ptr<ExprAST> error(const char *Str);
+std::unique_ptr<ExpressionAST> error(const char *Str);
 Value *errorV(const char *Str);
-std::unique_ptr<PrototypeAST> errorP(const char *Str);
+std::unique_ptr<FunctionPrototypeAST> errorP(const char *Str);
 
 #define LLVM_LOG_H
 

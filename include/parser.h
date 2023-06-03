@@ -21,27 +21,19 @@ using namespace llvm;
 using namespace ast;
 
 void InitializeModule();
-void MainLoop();
 
 static std::unique_ptr<LLVMContext> TheContext;
 static std::unique_ptr<Module> TheModule;
 static std::unique_ptr<IRBuilder<>> Builder;
-static std::map<std::string, Value *> NamedValues;
 
-int GetTokPrecedence();
+std::unique_ptr<ExpressionAST> ParseExpression();
+std::unique_ptr<NumberExprAST> ParseNumberExpr();
+std::unique_ptr<SentencesAST> ParseSentences();
+std::unique_ptr<VariableDefinitionAST> ParseVariableDefinition();
+std::unique_ptr<GlobalVariableDefinitionAST> ParseGlobalVariableDefinition();
+std::unique_ptr<FunctionDefinitionAST> ParseFunctionDefinition();
 
-std::unique_ptr<ExprAST> ParseExpression();
-std::unique_ptr<ExprAST> ParseNumberExpr();
-std::unique_ptr<ExprAST> ParseParenExpr();
-std::unique_ptr<ExprAST> ParseIdentifierExpr();
-std::unique_ptr<ExprAST> ParsePrimary();
-std::unique_ptr<ExprAST> ParseBinOpRHS(int ExprPrec,
-                                              std::unique_ptr<ExprAST> LHS);
-std::unique_ptr<ExprAST> ParseExpression();
-std::unique_ptr<PrototypeAST> ParsePrototype();
-std::unique_ptr<FunctionAST> ParseDefinition();
-std::unique_ptr<FunctionAST> ParseTopLevelExpr();
-std::unique_ptr<PrototypeAST> ParseExtern();
+void parseAST();
 
 #define LLVM_PARSER_H
 

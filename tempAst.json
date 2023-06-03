@@ -1,0 +1,447 @@
+{
+  "type": "TopLevelAST",
+  "version": 540,
+  "definitions": [
+    {
+      "type": "GlobalVariableDefinitionAST",
+      "type": "float",
+      "isConst": false,
+      "name": "time",
+      "init": null,
+      "layout": null
+    },
+    {
+      "type": "GlobalVariableDefinitionAST",
+      "type": "vec2",
+      "isConst": false,
+      "name": "mouse",
+      "init": null,
+      "layout": {
+        "type": "LayoutAst",
+        "type": "uniform",
+        "layoutQualifier": {
+          "type": "LayoutQualifierAst",
+          "ids": [
+            {
+              "type": "LayoutQualifierIdAST",
+              "id": "location",
+              "value": -1
+            }
+          ]
+        }
+      }
+    },
+    {
+      "type": "GlobalVariableDefinitionAST",
+      "type": "vec2",
+      "isConst": false,
+      "name": "resolution",
+      "init": null,
+      "layout": {
+        "type": "LayoutAst",
+        "type": "uniform",
+        "layoutQualifier": {
+          "type": "LayoutQualifierAst",
+          "ids": [
+            {
+              "type": "LayoutQualifierIdAST",
+              "id": "binding",
+              "value": -1
+            }
+          ]
+        }
+      }
+    },
+    {
+      "type": "FunctionDefinitionAST",
+      "prototype": {
+        "type": "FunctionPrototypeAST",
+        "returnType": "void",
+        "name": "main",
+        "args": []
+      },
+      "body": {
+        "type": "SentencesAST",
+        "sentences": [
+          {
+            "type": "VariableDefinitionAST",
+            "type": "vec4",
+            "isConst": false,
+            "name": "color",
+            "init": {
+              "type": "FunctionCallAST",
+              "callee": mix,
+              "args": {
+                "type": "ExprListAST",
+                "exprs": [
+                  {
+                    "type": "BinaryExpressionAST",
+                    "operator": "sequence_expr",
+                    "left": {
+                      "type": "BinaryExpressionAST",
+                      "operator": "sequence_expr",
+                      "left": {
+                        "type": "VariableExprAST",
+                        "identifier": "c1"
+                      },
+                      "right": {
+                        "type": "VariableExprAST",
+                        "identifier": "c2"
+                      }
+                    },
+                    "right": {
+                      "type": "BinaryExpressionAST",
+                      "operator": "times_expr",
+                      "left": {
+                        "type": "BinaryExpressionAST",
+                        "operator": "divide_expr",
+                        "left": {
+                          "type": "BinaryExpressionAST",
+                          "operator": "times_expr",
+                          "left": {
+                            "type": "BinaryExpressionAST",
+                            "operator": "divide_expr",
+                            "left": {
+                              "type": "PostfixExpressionAST",
+                              "operator": "dot_expr",
+                              "identifier": "y",
+                              "LHS": {
+                                "type": "VariableExprAST",
+                                "identifier": "pos"
+                              }
+                            },
+                            "right": {
+                              "type": "NumberExprAST",
+                              "valueType": "float",
+                              "value": 150.
+                            }
+                          },
+                          "right": {
+                            "type": "NumberExprAST",
+                            "valueType": "float",
+                            "value": 1.
+                          }
+                        },
+                        "right": {
+                          "type": "NumberExprAST",
+                          "valueType": "float",
+                          "value": 2.
+                        }
+                      },
+                      "right": {
+                        "type": "NumberExprAST",
+                        "valueType": "float",
+                        "value": 2.
+                      }
+                    }
+                  }
+                ]
+              }
+            }
+          },
+          {
+            "type": "BinaryExpressionAST",
+            "operator": "assign_expr",
+            "left": {
+              "type": "VariableExprAST",
+              "identifier": "color"
+            },
+            "right": {
+              "type": "FunctionCallAST",
+              "callee": mix,
+              "args": {
+                "type": "ExprListAST",
+                "exprs": [
+                  {
+                    "type": "BinaryExpressionAST",
+                    "operator": "sequence_expr",
+                    "left": {
+                      "type": "BinaryExpressionAST",
+                      "operator": "sequence_expr",
+                      "left": {
+                        "type": "VariableExprAST",
+                        "identifier": "c1"
+                      },
+                      "right": {
+                        "type": "VariableExprAST",
+                        "identifier": "c2"
+                      }
+                    },
+                    "right": {
+                      "type": "BinaryExpressionAST",
+                      "operator": "times_expr",
+                      "left": {
+                        "type": "BinaryExpressionAST",
+                        "operator": "divide_expr",
+                        "left": {
+                          "type": "BinaryExpressionAST",
+                          "operator": "times_expr",
+                          "left": {
+                            "type": "BinaryExpressionAST",
+                            "operator": "divide_expr",
+                            "left": {
+                              "type": "PostfixExpressionAST",
+                              "operator": "dot_expr",
+                              "identifier": "y",
+                              "LHS": {
+                                "type": "VariableExprAST",
+                                "identifier": "pos"
+                              }
+                            },
+                            "right": {
+                              "type": "NumberExprAST",
+                              "valueType": "float",
+                              "value": 150.
+                            }
+                          },
+                          "right": {
+                            "type": "BinaryExpressionAST",
+                            "operator": "plus_expr",
+                            "left": {
+                              "type": "FunctionCallAST",
+                              "callee": sin,
+                              "args": {
+                                "type": "ExprListAST",
+                                "exprs": [
+                                  {
+                                    "type": "BinaryExpressionAST",
+                                    "operator": "minus_expr",
+                                    "left": {
+                                      "type": "PostfixExpressionAST",
+                                      "operator": "dot_expr",
+                                      "identifier": "x",
+                                      "LHS": {
+                                        "type": "VariableExprAST",
+                                        "identifier": "pos"
+                                      }
+                                    },
+                                    "right": {
+                                      "type": "FunctionCallAST",
+                                      "callee": cos,
+                                      "args": {
+                                        "type": "ExprListAST",
+                                        "exprs": [
+                                          {
+                                            "type": "BinaryExpressionAST",
+                                            "operator": "plus_expr",
+                                            "left": {
+                                              "type": "BinaryExpressionAST",
+                                              "operator": "minus_expr",
+                                              "left": {
+                                                "type": "VariableExprAST",
+                                                "identifier": "time"
+                                              },
+                                              "right": {
+                                                "type": "PostfixExpressionAST",
+                                                "operator": "dot_expr",
+                                                "identifier": "y",
+                                                "LHS": {
+                                                  "type": "VariableExprAST",
+                                                  "identifier": "pos"
+                                                }
+                                              }
+                                            },
+                                            "right": {
+                                              "type": "PostfixExpressionAST",
+                                              "operator": "dot_expr",
+                                              "identifier": "x",
+                                              "LHS": {
+                                                "type": "VariableExprAST",
+                                                "identifier": "pos"
+                                              }
+                                            }
+                                          }
+                                        ]
+                                      }
+                                    }
+                                  }
+                                ]
+                              }
+                            },
+                            "right": {
+                              "type": "NumberExprAST",
+                              "valueType": "float",
+                              "value": 1.
+                            }
+                          }
+                        },
+                        "right": {
+                          "type": "NumberExprAST",
+                          "valueType": "float",
+                          "value": 2.
+                        }
+                      },
+                      "right": {
+                        "type": "NumberExprAST",
+                        "valueType": "float",
+                        "value": 2.
+                      }
+                    }
+                  }
+                ]
+              }
+            }
+          },
+          {
+            "type": "VariableDefinitionAST",
+            "type": "vec4",
+            "isConst": false,
+            "name": "c3",
+            "init": {
+              "type": "FunctionCallAST",
+              "callee": mix,
+              "args": {
+                "type": "ExprListAST",
+                "exprs": [
+                  {
+                    "type": "NumberExprAST",
+                    "valueType": "int",
+                    "value": 4
+                  }
+                ]
+              }
+            }
+          },
+          {
+            "type": "BinaryExpressionAST",
+            "operator": "assign_expr",
+            "left": {
+              "type": "VariableExprAST",
+              "identifier": "c1"
+            },
+            "right": {
+              "type": "TypeConstructorAST",
+              "type": "vec4",
+              "args": {
+                "type": "ExprListAST",
+                "exprs": [
+                  {
+                    "type": "BinaryExpressionAST",
+                    "operator": "sequence_expr",
+                    "left": {
+                      "type": "BinaryExpressionAST",
+                      "operator": "sequence_expr",
+                      "left": {
+                        "type": "BinaryExpressionAST",
+                        "operator": "sequence_expr",
+                        "left": {
+                          "type": "NumberExprAST",
+                          "valueType": "int",
+                          "value": 255
+                        },
+                        "right": {
+                          "type": "NumberExprAST",
+                          "valueType": "int",
+                          "value": 0
+                        }
+                      },
+                      "right": {
+                        "type": "NumberExprAST",
+                        "valueType": "int",
+                        "value": 0
+                      }
+                    },
+                    "right": {
+                      "type": "NumberExprAST",
+                      "valueType": "int",
+                      "value": 255
+                    }
+                  }
+                ]
+              }
+            }
+          },
+          {
+            "type": "VariableDefinitionAST",
+            "type": "vec2",
+            "isConst": false,
+            "name": "pos",
+            "init": {
+              "type": "BinaryExpressionAST",
+              "operator": "divide_expr",
+              "left": {
+                "type": "PostfixExpressionAST",
+                "operator": "dot_expr",
+                "identifier": "xy",
+                "LHS": {
+                  "type": "VariableExprAST",
+                  "identifier": "gl_FragCoord"
+                }
+              },
+              "right": {
+                "type": "PostfixExpressionAST",
+                "operator": "dot_expr",
+                "identifier": "xy",
+                "LHS": {
+                  "type": "VariableExprAST",
+                  "identifier": "resolution"
+                }
+              }
+            }
+          },
+          {
+            "type": "BinaryExpressionAST",
+            "operator": "assign_expr",
+            "left": {
+              "type": "VariableExprAST",
+              "identifier": "c2"
+            },
+            "right": {
+              "type": "TypeConstructorAST",
+              "type": "vec4",
+              "args": {
+                "type": "ExprListAST",
+                "exprs": [
+                  {
+                    "type": "BinaryExpressionAST",
+                    "operator": "sequence_expr",
+                    "left": {
+                      "type": "BinaryExpressionAST",
+                      "operator": "sequence_expr",
+                      "left": {
+                        "type": "BinaryExpressionAST",
+                        "operator": "sequence_expr",
+                        "left": {
+                          "type": "NumberExprAST",
+                          "valueType": "int",
+                          "value": 255
+                        },
+                        "right": {
+                          "type": "NumberExprAST",
+                          "valueType": "int",
+                          "value": 255
+                        }
+                      },
+                      "right": {
+                        "type": "NumberExprAST",
+                        "valueType": "int",
+                        "value": 0
+                      }
+                    },
+                    "right": {
+                      "type": "NumberExprAST",
+                      "valueType": "int",
+                      "value": 255
+                    }
+                  }
+                ]
+              }
+            }
+          },
+          {
+            "type": "BinaryExpressionAST",
+            "operator": "assign_expr",
+            "left": {
+              "type": "VariableExprAST",
+              "identifier": "gl_FragColor"
+            },
+            "right": {
+              "type": "VariableExprAST",
+              "identifier": "color"
+            }
+          }
+        ]
+      }
+    }
+  ]
+}
