@@ -33,7 +33,7 @@ std::unique_ptr<VariableDefinitionAST> ParseVariableDefinition();
 std::unique_ptr<GlobalVariableDefinitionAST> ParseGlobalVariableDefinition();
 std::unique_ptr<FunctionDefinitionAST> ParseFunctionDefinition();
 
-void parseAST();
+int parseAST();
 
 #define LLVM_PARSER_H
 

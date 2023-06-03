@@ -9,13 +9,19 @@ extern std::unique_ptr<TopLevelAST> topLevelAst;
 
 int main() {
   initBinopPrecedence();
-  redirectInput("/home/geraltigas/compilerCourse/llvm16/llvm/GLSL/temp.glsl");
-  rediectOutput("/home/geraltigas/compilerCourse/llvm16/llvm/GLSL/tempAst.json");
+  redirectInput(GLSL_FILE);
+  rediectOutput(JSON_FILE);
   Tokenize();
-  //printTokens();
+  printTokens();
   InitializeModule();
-  parseAST();
+  if (parseAST() < 0) {
+    consolePrint("reject");
+    return -1;
+  } else {
+    consolePrint("accept");
+  }
+
   std::cout << topLevelAst->toString() << std::endl;
-  //LOG_EXPR(topLevelAst)
-  //TheModule->print(errs(), nullptr);
+  // LOG_EXPR(topLevelAst)
+  // TheModule->print(errs(), nullptr);
 }

@@ -16,6 +16,7 @@ int advance();
 int getNextToken();
 void redirectInput(std::string filePath);
 void rediectOutput(std::string filePath);
+void consolePrint(std::string str);
 void Tokenize();
 void printTokens();
 

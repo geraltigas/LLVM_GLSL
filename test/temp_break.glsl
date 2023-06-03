@@ -12,6 +12,8 @@ void main(int a) {
         gl_FragColor = vec4(col, 1.0);
         if (gl_FragColor.r > 0.5) {
             break;
+        }else {
+            continue;
         }
     }
 }

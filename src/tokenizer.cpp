@@ -138,8 +138,12 @@ int gettok() {
     std::string NumStr;
     do {
       NumStr += std::string(1, LastChar);
+      if (LastChar == 'f') {
+        LastChar = advance();
+        return tok_number;
+      }
       LastChar = advance();
-    } while (isdigit(LastChar) || LastChar == '.');
+    } while (isdigit(LastChar) || LastChar == '.' || LastChar == 'f');
     // check is a number
     if (NumStr.find_first_not_of("0123456789.") != std::string::npos) {
       return tok_eof;
@@ -268,11 +272,15 @@ int gettok() {
 
   if (LastChar == '^') {
     LastChar = advance();
+    if (LastChar == '^') {
+      LastChar = advance();
+      return tok_xor;
+    }
     if (LastChar == '=') {
       LastChar = advance();
       return tok_xor_assign;
     }
-    return tok_xor;
+    return tok_bit_xor;
   }
 
   if (LastChar == '=') {
@@ -669,7 +677,13 @@ std::string Token::toString() {
 }
 
 void printTokens() {
+  rediectOutput(TOKENS_FILE);
   for (auto &token : tokens) {
     std::cout << token.toString() << std::endl;
   }
+  rediectOutput(JSON_FILE);
+}
+void consolePrint(std::string str) {
+  // use std::cerr to print to console
+  std::cerr << str << std::endl;
 }

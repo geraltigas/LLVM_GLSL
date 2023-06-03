@@ -3,8 +3,6 @@
 //
 
 #include "ast.h"
-#include "log.h"
-#include "parser.h"
 
 using namespace ast;
 
@@ -21,6 +19,7 @@ std::string ast::layoutTypeToString(LayoutType type) {
   }
   return "";
 }
+
 std::string ast::layoutIdentifierToString(LayoutIdentifier id) {
   switch (id) {
   case location:
@@ -87,7 +86,7 @@ std::string FunctionPrototypeAST::toString() const {
     argsString.pop_back();
   }
 
-  return R"({"type":"FunctionPrototypeAST","returnType":")" +
+  return R"({"type":"FunctionPrototypeAST","returnAstType":")" +
          astTypeToString(returnType) + R"(","name":")" + Name +
          R"(","args":[)" + argsString + "]}";
 }
@@ -106,6 +105,10 @@ std::string SentencesAST::toString() const {
 }
 Value *IfStatementAST::codegen() { return nullptr; }
 std::string IfStatementAST::toString() const {
+  if (else_ == nullptr) {
+    return R"({"type":"IfStatementAST","condition":)" + condition->toString() +
+           ",\"then\":" + then->toString() + "}";
+  }
   return R"({"type":"IfStatementAST","condition":)" + condition->toString() +
          ",\"then\":" + then->toString() + ",\"else\":" + else_->toString() +
          "}";
@@ -117,7 +120,7 @@ std::string ArrayAccessAST::toString() const {
 }
 Value *TypeConstructorAST::codegen() { return nullptr; }
 std::string TypeConstructorAST::toString() const {
-  return R"({"type":"TypeConstructorAST","type":")" + astTypeToString(type) +
+  return R"({"type":"TypeConstructorAST","astType":")" + astTypeToString(type) +
          R"(","args":)" + args->toString() + "}";
 }
 Value *WhileStatementAST::codegen() { return nullptr; }
@@ -158,7 +161,7 @@ std::string ReturnStatementAST::toString() const {
 Value *NumberExprAST::codegen() { return nullptr; }
 std::string NumberExprAST::toString() const {
   // valueType, value
-  return R"({"type":"NumberExprAST","valueType":")" + astTypeToString(type) +
+  return R"({"type":"NumberExprAST","astType":")" + astTypeToString(type) +
          R"(","value":)" + value + "}";
 }
 Value *VariableExprAST::codegen() { return nullptr; }
@@ -181,19 +184,19 @@ std::string FunctionDefinitionAST::toString() const {
 Value *VariableDefinitionAST::codegen() { return nullptr; }
 std::string VariableDefinitionAST::toString() const {
   if (init == nullptr) {
-    return R"({"type":"VariableDefinitionAST","type":")" +
+    return R"({"type":"VariableDefinitionAST","astType":")" +
            astTypeToString(type) + R"(","isConst":)" +
            (isConst ? "true" : "false") + R"(,"name":")" + name + "\"}";
   }
   // type, isConst, name, init
-  return R"({"type":"VariableDefinitionAST","type":")" + astTypeToString(type) +
+  return R"({"type":"VariableDefinitionAST","astType":")" + astTypeToString(type) +
          R"(","isConst":)" + (isConst ? "true" : "false") + R"(,"name":")" +
          name + R"(","init":)" + init->toString() + "}";
 }
 Value *LayoutAst::codegen() { return nullptr; }
 std::string LayoutAst::toString() const {
   // toJson: type, layoutQualifier
-  return R"({"type":"LayoutAst","type":")" + layoutTypeToString(type) +
+  return R"({"type":"LayoutAst","astType":")" + layoutTypeToString(type) +
          R"(","layoutQualifier":)" + layoutQualifier->toString() + "}";
 }
 Value *TopLevelAST::codegen() { return nullptr; }
@@ -213,7 +216,7 @@ std::string TopLevelAST::toString() const {
 }
 std::string FunctionArgumentAST::toString() const {
   // type, name
-  return R"({"type":"FunctionArgumentAST","type":")" + astTypeToString(type) +
+  return R"({"type":"FunctionArgumentAST","astType":")" + astTypeToString(type) +
          R"(","name":")" + name + "\"}";
 }
 std::string SentenceAST::toString() const { return std::string(); }
@@ -227,24 +230,24 @@ std::string LayoutQualifierIdAST::toString() const {
 }
 std::string GlobalVariableDefinitionAST::toString() const {
   if (init == nullptr && layout == nullptr) {
-    return R"({"type":"GlobalVariableDefinitionAST","type":")" +
+    return R"({"type":"GlobalVariableDefinitionAST","astType":")" +
            astTypeToString(type) + R"(","isConst":)" +
            (isConst ? "true" : "false") + R"(,"name":")" + name +
            R"(","init":null,"layout":null})";
   }
   if (init == nullptr) {
-    return R"({"type":"GlobalVariableDefinitionAST","type":")" +
+    return R"({"type":"GlobalVariableDefinitionAST","astType":")" +
            astTypeToString(type) + R"(","isConst":)" +
            (isConst ? "true" : "false") + R"(,"name":")" + name +
            R"(","init":null,"layout":)" + layout->toString() + "}";
   }
   if (layout == nullptr) {
-    return R"({"type":"GlobalVariableDefinitionAST","type":")" +
+    return R"({"type":"GlobalVariableDefinitionAST","astType":")" +
            astTypeToString(type) + R"(","isConst":)" +
            (isConst ? "true" : "false") + R"(,"name":")" + name +
            R"(","init":)" + init->toString() + ",\"layout\":null}";
   }
-  return R"({"type":"GlobalVariableDefinitionAST","type":")" +
+  return R"({"type":"GlobalVariableDefinitionAST","astType":")" +
          astTypeToString(type) + R"(","isConst":)" +
          (isConst ? "true" : "false") + R"(,"name":")" + name + R"(","init":)" +
          init->toString() + ",\"layout\":" + layout->toString() + "}";

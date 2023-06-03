@@ -6,6 +6,10 @@
 #include <iostream>
 #include <map>
 
+#define GLSL_FILE "/home/geraltigas/compilerCourse/llvm16/llvm/GLSL/test/temp.glsl"
+#define JSON_FILE "/home/geraltigas/compilerCourse/llvm16/llvm/GLSL/tempAst.json"
+#define TOKENS_FILE "/home/geraltigas/compilerCourse/llvm16/llvm/GLSL/tokens.txt"
+
 #define DEBUG
 
 void initBinopPrecedence();

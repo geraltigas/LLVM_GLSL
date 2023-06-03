@@ -153,6 +153,10 @@ public:
   explicit ExprListAST(std::vector<std::unique_ptr<ExpressionAST>> expressions)
       : expressions(std::move(expressions)) {}
 
+  explicit ExprListAST() {
+    expressions = std::vector<std::unique_ptr<ExpressionAST>>();
+  }
+
   Value *codegen() override;
 
   std::string toString() const override;
@@ -257,13 +261,13 @@ public:
 };
 
 class ForStatementAST : public SentenceAST {
-  std::unique_ptr<ExpressionAST> init;
+  std::unique_ptr<SentenceAST> init;
   std::unique_ptr<ExpressionAST> condition;
   std::unique_ptr<ExpressionAST> step;
   std::unique_ptr<SentenceAST> body;
 
 public:
-  ForStatementAST(std::unique_ptr<ExpressionAST> init,
+  ForStatementAST(std::unique_ptr<SentenceAST> init,
                   std::unique_ptr<ExpressionAST> condition,
                   std::unique_ptr<ExpressionAST> step,
                   std::unique_ptr<SentenceAST> body)
@@ -391,7 +395,7 @@ public:
   ~FunctionDefinitionAST() override = default;
 };
 
-class VariableDefinitionAST : public DefinitionAST, SentenceAST {
+class VariableDefinitionAST : public DefinitionAST, public SentenceAST {
 
 protected:
   AstType type;

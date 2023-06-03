@@ -5,7 +5,6 @@
 #include "parser.h"
 #include "ast.h"
 #include "global.h"
-#include "log.h"
 #include "tokenizer.h"
 
 std::unique_ptr<TopLevelAST> topLevelAst = nullptr;
@@ -349,8 +348,8 @@ std::unique_ptr<GlobalVariableDefinitionAST> ParseGlobalVariableDefinition() {
   std::unique_ptr<std::string> name;
 
   // record
-        uint64_t index_record = index_temp;
-        // parse
+  uint64_t index_record = index_temp;
+  // parse
   std::unique_ptr<LayoutAst> layout = ParseLayout();
 
   if (layout == nullptr) {
@@ -398,7 +397,6 @@ std::unique_ptr<VariableDefinitionAST> ParseVariableDefinition() {
   std::unique_ptr<ExpressionAST> expression;
   bool is_const = false;
 
-  // const
   // record
   uint64_t index_record = index_temp;
   // parse
@@ -456,7 +454,7 @@ std::unique_ptr<VariableDefinitionAST> ParseVariableDefinition() {
     index_temp = index_record;
     return nullptr;
   }
-  index_temp++;
+  // index_temp++;
 
   return std::make_unique<VariableDefinitionAST>(
       type, is_const, std::string(name->c_str()), std::move(expression));
@@ -519,8 +517,7 @@ std::unique_ptr<ExpressionAST> ParsePrimaryExpression() {
       std::unique_ptr<ExprListAST> expr_list = ParseExprList();
       if (expr_list == nullptr) {
         // recover
-        index_temp = index_record;
-        return nullptr;
+        expr_list = std::make_unique<ExprListAST>();
       }
       if (tokens[index_temp].type != tok_right_paren) {
         // recover
@@ -628,7 +625,7 @@ std::unique_ptr<ExpressionAST> ParsePostfixExpression() {
   uint64_t index_record = index_temp;
   // parse
   std::unique_ptr<ExpressionAST> expression = ParsePrimaryExpression();
-  //LOG(expression);
+  // LOG(expression);
   if (expression == nullptr) {
     // recover
     index_temp = index_record;
@@ -1231,7 +1228,7 @@ std::unique_ptr<ExpressionAST> ParseExpression() {
     return nullptr;
   }
 
-  //LOG(expression);
+  // LOG(expression);
 
   return expression;
 }
@@ -1240,7 +1237,7 @@ std::unique_ptr<SentenceAST> ParseSentence() {
   // record
   uint64_t index_record = index_temp;
   // parse
-  if (tokens[index_temp].type == tok_left_paren) {
+  if (tokens[index_temp].type == tok_left_brace) {
     index_temp++;
     std::unique_ptr<SentencesAST> sentence = ParseSentences();
     if (sentence == nullptr) {
@@ -1248,7 +1245,7 @@ std::unique_ptr<SentenceAST> ParseSentence() {
       index_temp = index_record;
       return nullptr;
     }
-    if (tokens[index_temp].type != tok_right_paren) {
+    if (tokens[index_temp].type != tok_right_brace) {
       // recover
       index_temp = index_record;
       return nullptr;
@@ -1266,8 +1263,7 @@ std::unique_ptr<SentenceAST> ParseSentence() {
     index_temp++;
     // change to sentence
     return std::unique_ptr<SentenceAST>(
-        (SentenceAST *)
-            variable_definition.release()); // TODO: check whether it is right
+        std::move(variable_definition)); // TODO: check whether it is right
   } else {
     // recover
     index_temp = index_record;
@@ -1301,7 +1297,6 @@ std::unique_ptr<SentenceAST> ParseSentence() {
       return nullptr;
     }
     if (tokens[index_temp].type != tok_else) {
-      index_temp++;
       // only if no else
       return std::make_unique<IfStatementAST>(std::move(condition),
                                               std::move(if_sentence), nullptr);
@@ -1400,11 +1395,22 @@ std::unique_ptr<SentenceAST> ParseSentence() {
       return nullptr;
     }
     index_temp++;
-    std::unique_ptr<ExpressionAST> init = ParseExpression();
+    // record
+    index_record = index_temp;
+    // parse
+    std::unique_ptr<SentenceAST> init = ParseExpression();
     if (init == nullptr) {
       // recover
       index_temp = index_record;
-      return nullptr;
+      // record
+      index_record = index_temp;
+      // parse
+      init = ParseVariableDefinition();
+      if (init == nullptr) {
+        // recover
+        index_temp = index_record;
+        return nullptr;
+      }
     }
     if (tokens[index_temp].type != tok_semicolon) {
       // recover
@@ -1576,9 +1582,10 @@ std::unique_ptr<FunctionDefinitionAST> ParseFunctionDefinition() {
     }
 
     index_temp++;
+    TokenType tokenType = tokens[index_temp].type;
     // parse
     AstType type = ParseType();
-    if (type == type_error) {
+    if (type == type_error && tokenType != tok_right_paren) {
       // recover
       index_temp = index_record;
       return nullptr;
@@ -1588,10 +1595,15 @@ std::unique_ptr<FunctionDefinitionAST> ParseFunctionDefinition() {
     index_record = index_temp;
     // parse
     std::unique_ptr<std::string> name = ParseIdentifier();
-    if (name == nullptr) {
+    if (name == nullptr && tokenType != tok_right_paren) {
       // recover
       index_temp = index_record;
       return nullptr;
+    }
+
+    if (tokenType != tok_right_paren) {
+      parameters.push_back(std::make_unique<FunctionArgumentAST>(
+          type, std::string(name->c_str())));
     }
 
     // record
@@ -1607,9 +1619,6 @@ std::unique_ptr<FunctionDefinitionAST> ParseFunctionDefinition() {
       index_temp = index_record;
       return nullptr;
     }
-
-    parameters.push_back(std::make_unique<FunctionArgumentAST>(
-        type, std::string(name->c_str())));
   }
 
   // record
@@ -1646,12 +1655,11 @@ std::unique_ptr<FunctionDefinitionAST> ParseFunctionDefinition() {
 };
 
 int ParseVersion() {
-  int version = 0;
+  int version = -1;
   uint64_t index_record = index_temp;
   if (tokens[index_temp].type == tok_version) { // version
     index_temp++;
     if (tokens[index_temp].type != tok_number) {
-      error("Expected number");
       index_temp = index_record;
       return -1;
     } else {
@@ -1661,56 +1669,6 @@ int ParseVersion() {
   }
   return version;
 }
-
-// std::unique_ptr<std::vector<std::unique_ptr<DefinitionAST>>>
-// ParseDefinitions() {
-//   std::unique_ptr<std::vector<std::unique_ptr<DefinitionAST>>> definitionASTs
-//   =
-//       std::make_unique<std::vector<std::unique_ptr<DefinitionAST>>>();
-//   while (true) {
-//     uint64_t index_record = index_temp;
-//     if (tokens[index_temp].type == tok_eof) { // end
-//       return definitionASTs;
-//     }
-//     if (!isAstType(tokens[index_temp].type) &&
-//         tokens[index_temp].type != tok_layout &&
-//         tokens[index_temp].type != tok_uniform &&
-//         tokens[index_temp].type != tok_layout_in &&
-//         tokens[index_temp].type != tok_layout_out) {
-//       error("Unknown token when expecting a Definition");
-//       return nullptr;
-//     }
-//     if (tokens[index_temp].type == tok_layout ||
-//         tokens[index_temp].type == tok_uniform ||
-//         tokens[index_temp].type == tok_layout_in ||
-//         tokens[index_temp].type == tok_layout_out ||
-//         isAstType(tokens[index_temp].type)) {
-//       // record
-//       uint64_t index_record = index_temp;
-//       // parse
-//       std::unique_ptr<GlobalVariableDefinitionAST> layoutVariableDefinition =
-//           ParseLayoutVariableDefinition();
-//       if (layoutVariableDefinition == nullptr) {
-//         // error("ParseGlobalVariableDefinition error");
-//         //  recover
-//         index_temp = index_record;
-//         // record
-//         uint64_t index_record = index_temp;
-//         // parse
-//         std::unique_ptr<FunctionDefinitionAST> functionAST =
-//             ParseFunctionDefinition();
-//         if (functionAST != nullptr) {
-//           definitionASTs->push_back(std::move(functionAST));
-//           continue;
-//         }
-//
-//         // recover
-//         index_temp = index_record;
-//       }
-//       definitionASTs->push_back(std::move(layoutVariableDefinition));
-//     }
-//   }
-// }
 
 std::unique_ptr<std::vector<std::unique_ptr<DefinitionAST>>>
 ParseDefinitions() {
@@ -1738,59 +1696,33 @@ ParseDefinitions() {
     if (layoutVariableDefinition == nullptr) {
       // recover
       index_temp = index_record;
-      error("ParseGlobalVariableDefinition error");
       return nullptr;
     }
     definitionASTs->push_back(std::move(layoutVariableDefinition));
   }
 }
 
-void parseAST() {
+int parseAST() {
   int version = 0;
   std::unique_ptr<std::vector<std::unique_ptr<DefinitionAST>>> definitionASTs;
 
   if (tokens[index_temp].type == tok_eof) { // end
-    return;
+    return 0;
   }
 
   version = ParseVersion();
 
   if (version == -1) {
-    error("ParseVersion error");
-    return;
+    return -1;
   }
 
   definitionASTs = ParseDefinitions();
 
-  if (definitionASTs->size() == 0) {
-    error("ParseDefinitions error");
-    return;
+  if (definitionASTs == nullptr || definitionASTs->size() == 0) {
+    return -1;
   }
-
-  // definition syntax
-  //  if (tokens[index_temp].type == tok_layout) { // layout variable definition
-  //    std::unique_ptr<GlobalVariableDefinitionAST> layoutVariableDefinition =
-  //        ParseLayoutVariableDefinition();
-  //    if (layoutVariableDefinition == nullptr) {
-  //      error("ParseGlobalVariableDefinition error");
-  //      return;
-  //    }
-  //    globalVariableDefinitionASTs.push_back(std::move(layoutVariableDefinition));
-  //  } else { // global variable definition and function definition
-  //    std::unique_ptr<FunctionDefinitionAST> functionAST =
-  //    ParseFunctionDefinition(); if (functionAST != nullptr) {
-  //      functionASTs.push_back(std::move(functionAST));
-  //    } else {
-  //      std::unique_ptr<GlobalVariableDefinitionAST>
-  //      globalVariableDefinitionAST =
-  //          ParseGlobalVariableDefinition();
-  //      if (globalVariableDefinitionAST != nullptr) {
-  //        globalVariableDefinitionASTs.push_back(
-  //            std::move(globalVariableDefinitionAST));
-  //      }
-  //    }
-  //  }
 
   topLevelAst =
       std::make_unique<TopLevelAST>(version, std::move(definitionASTs));
+  return 0;
 };
