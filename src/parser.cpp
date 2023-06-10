@@ -14,19 +14,28 @@ extern TokenType CurTok;
 extern std::string IdentifierStr; // Filled in if tok_identifier
 extern std::string NumVal;        // Filled in if tok_number
 
+extern std::unique_ptr<LLVMContext> TheContext;
+extern std::unique_ptr<Module> TheModule;
+extern std::unique_ptr<IRBuilder<>> Builder;
+extern std::map<std::string, Value *> NamedValues;
+
 using namespace ast;
 
 void InitializeModule() {
   // Open a new context and module.
   TheContext = std::make_unique<LLVMContext>();
-  TheModule = std::make_unique<Module>("my cool jit", *TheContext);
+  TheModule = std::make_unique<Module>("GLSL", *TheContext);
 
   // Create a new builder for the module.
   Builder = std::make_unique<IRBuilder<>>(*TheContext);
 }
 
 std::unique_ptr<NumberExprAST> ParseNumberExpr() {
-  if (tokens[index_temp].type != tok_number) {
+  if (tokens[index_temp].type != tok_number &&
+      tokens[index_temp].type != tok_int &&
+      tokens[index_temp].type != tok_float &&
+      tokens[index_temp].type != tok_double &&
+      tokens[index_temp].type != tok_uint) {
     return nullptr;
   }
 
@@ -36,7 +45,9 @@ std::unique_ptr<NumberExprAST> ParseNumberExpr() {
   if (tokens[index_temp].value->find(".") != std::string::npos) {
     // float
     auto result = std::make_unique<NumberExprAST>(
-        std::string(tokens[index_temp].value->c_str()), type_float);
+        std::string(tokens[index_temp].value->c_str()),
+        tokens[index_temp].value->find("f") != std::string::npos ? type_float
+                                                                 : type_double);
     index_temp++;
     return std::move(result);
   }
@@ -580,7 +591,11 @@ std::unique_ptr<ExpressionAST> ParsePrimaryExpression() {
       index_temp++;
       return std::make_unique<TypeConstructorAST>(type, std::move(expr_list));
     }
-  } else if (tokens[index_temp].type == tok_number) {
+  } else if (tokens[index_temp].type == tok_number ||
+             tokens[index_temp].type == tok_float ||
+             tokens[index_temp].type == tok_double ||
+             tokens[index_temp].type == tok_uint ||
+             tokens[index_temp].type == tok_int) {
     // record
     index_record = index_temp;
     // parse
@@ -1183,6 +1198,7 @@ std::unique_ptr<ExpressionAST> ParseAssignmentExpression() {
 }
 
 std::unique_ptr<ExpressionAST> ParseSequenceExpression() {
+  std::vector<std::unique_ptr<ExpressionAST>> sequence_expr;
   // record
   uint64_t index_record = index_temp;
   // parse
@@ -1193,6 +1209,8 @@ std::unique_ptr<ExpressionAST> ParseSequenceExpression() {
     return nullptr;
   }
 
+  sequence_expr.push_back(std::move(expression));
+
   // record
   index_record = index_temp;
   // parse
@@ -1202,18 +1220,17 @@ std::unique_ptr<ExpressionAST> ParseSequenceExpression() {
     index_record = index_temp;
     // parse
     std::unique_ptr<ExpressionAST> expression_ = ParseAssignmentExpression();
-    if (expression == nullptr) {
+    if (expression_ == nullptr) {
       // recover
       index_temp = index_record;
       return nullptr;
     }
 
     // combine
-    expression = std::make_unique<BinaryExpressionAST>(
-        sequence_expr, std::move(expression), std::move(expression_));
+    sequence_expr.push_back(std::move(expression_));
   }
 
-  return expression;
+  return std::make_unique<SequenceExpressionAST>(std::move(sequence_expr));
 }
 
 std::unique_ptr<ExpressionAST> ParseExpression() {
@@ -1602,8 +1619,8 @@ std::unique_ptr<FunctionDefinitionAST> ParseFunctionDefinition() {
     }
 
     if (tokenType != tok_right_paren) {
-      parameters.push_back(std::make_unique<FunctionArgumentAST>(
-          type, std::string(name->c_str())));
+      parameters.push_back(
+          std::make_unique<FunctionArgumentAST>(type, std::string(*name)));
     }
 
     // record
@@ -1659,7 +1676,7 @@ int ParseVersion() {
   uint64_t index_record = index_temp;
   if (tokens[index_temp].type == tok_version) { // version
     index_temp++;
-    if (tokens[index_temp].type != tok_number) {
+    if (tokens[index_temp].type != tok_int) {
       index_temp = index_record;
       return -1;
     } else {
@@ -1721,6 +1738,9 @@ int parseAST() {
   if (definitionASTs == nullptr || definitionASTs->size() == 0) {
     return -1;
   }
+
+  // inject default global variable
+  definitionASTs->push_back(std::make_unique<GlobalVariableDefinitionAST>(type_vec4, false,"gl_Position",nullptr,nullptr));
 
   topLevelAst =
       std::make_unique<TopLevelAST>(version, std::move(definitionASTs));

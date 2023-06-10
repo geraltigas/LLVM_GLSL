@@ -7,24 +7,11 @@
 #include <memory>
 #include <map>
 #include <ast.h>
-#include "llvm/IR/BasicBlock.h"
-#include "llvm/IR/Constants.h"
-#include "llvm/IR/DerivedTypes.h"
-#include "llvm/IR/Function.h"
-#include "llvm/IR/IRBuilder.h"
-#include "llvm/IR/LLVMContext.h"
-#include "llvm/IR/Module.h"
-#include "llvm/IR/Type.h"
-#include "llvm/IR/Verifier.h"
 
 using namespace llvm;
 using namespace ast;
 
 void InitializeModule();
-
-static std::unique_ptr<LLVMContext> TheContext;
-static std::unique_ptr<Module> TheModule;
-static std::unique_ptr<IRBuilder<>> Builder;
 
 std::unique_ptr<ExpressionAST> ParseExpression();
 std::unique_ptr<NumberExprAST> ParseNumberExpr();

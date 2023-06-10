@@ -6,6 +6,11 @@
 
 using namespace ast;
 
+extern std::unique_ptr<LLVMContext> TheContext;
+extern std::unique_ptr<Module> TheModule;
+extern std::unique_ptr<IRBuilder<>> Builder;
+extern std::map<std::string, Value *> NamedValues;
+
 std::string ast::layoutTypeToString(LayoutType type) {
   switch (type) {
   case uniform:
@@ -30,31 +35,30 @@ std::string ast::layoutIdentifierToString(LayoutIdentifier id) {
   return "";
 }
 
-Value *ConditionalExpressionAST::codegen() { return nullptr; }
 std::string ConditionalExpressionAST::toString() const {
   // toJson
   return R"({"type":"ConditionalExpressionAST","condition":)" +
          condition->toString() + ",\"then\":" + then->toString() +
          ",\"else\":" + else_->toString() + "}";
 }
-Value *BinaryExpressionAST::codegen() { return nullptr; }
+
 std::string BinaryExpressionAST::toString() const {
   return R"({"type":"BinaryExpressionAST","operator":")" +
          exprTypeToString(type) + R"(","left":)" + LHS->toString() +
          ",\"right\":" + RHS->toString() + "}";
 }
-Value *PrefixExpressionAST::codegen() { return nullptr; }
+
 std::string PrefixExpressionAST::toString() const {
   return R"({"type":"PrefixExpressionAST","operator":")" +
          exprTypeToString(type) + R"(","operand":)" + RHS->toString() + "}";
 }
-Value *PostfixExpressionAST::codegen() { return nullptr; }
+
 std::string PostfixExpressionAST::toString() const {
   return R"({"type":"PostfixExpressionAST","operator":")" +
          exprTypeToString(type) + R"(","identifier":")" + identifier +
          R"(","LHS":)" + LHS->toString() + "}";
 }
-Value *ExprListAST::codegen() { return nullptr; }
+
 std::string ExprListAST::toString() const {
   // change exprs vector to string
   std::string exprsString;
@@ -67,18 +71,18 @@ std::string ExprListAST::toString() const {
   }
   return R"({"type":"ExprListAST","exprs":[)" + exprsString + "]}";
 }
-Value *FunctionCallAST::codegen() { return nullptr; }
+
 std::string FunctionCallAST::toString() const {
   // toJson: callee ,args
   return R"({"type":"FunctionCallAST","callee":)" + callee +
          ",\"args\":" + args->toString() + "}";
 }
-Function *FunctionPrototypeAST::codegen() { return nullptr; }
+
 std::string FunctionPrototypeAST::toString() const {
   // toJson: returnType, Name, Args
   //  change args vector to string
   std::string argsString;
-  for (auto &arg : Args) {
+  for (auto &arg : args) {
     argsString += arg->toString();
     argsString += ",";
   }
@@ -87,10 +91,10 @@ std::string FunctionPrototypeAST::toString() const {
   }
 
   return R"({"type":"FunctionPrototypeAST","returnAstType":")" +
-         astTypeToString(returnType) + R"(","name":")" + Name +
+         astTypeToString(returnType) + R"(","name":")" + name +
          R"(","args":[)" + argsString + "]}";
 }
-Value *SentencesAST::codegen() { return nullptr; }
+
 std::string SentencesAST::toString() const {
   // turn sentences vector to string
   std::string sentencesString;
@@ -103,7 +107,7 @@ std::string SentencesAST::toString() const {
   }
   return R"({"type":"SentencesAST","sentences":[)" + sentencesString + "]}";
 }
-Value *IfStatementAST::codegen() { return nullptr; }
+
 std::string IfStatementAST::toString() const {
   if (else_ == nullptr) {
     return R"({"type":"IfStatementAST","condition":)" + condition->toString() +
@@ -113,75 +117,70 @@ std::string IfStatementAST::toString() const {
          ",\"then\":" + then->toString() + ",\"else\":" + else_->toString() +
          "}";
 }
-Value *ArrayAccessAST::codegen() { return nullptr; }
-std::string ArrayAccessAST::toString() const {
-  return R"({"type":"ArrayAccessAST","identifier":")" + identifier +
-         R"(","index":)" + index->toString() + "}";
-}
-Value *TypeConstructorAST::codegen() { return nullptr; }
+
 std::string TypeConstructorAST::toString() const {
   return R"({"type":"TypeConstructorAST","astType":")" + astTypeToString(type) +
          R"(","args":)" + args->toString() + "}";
 }
-Value *WhileStatementAST::codegen() { return nullptr; }
+
 std::string WhileStatementAST::toString() const {
   // condition, body
   return R"({"type":"WhileStatementAST","condition":)" + condition->toString() +
          ",\"body\":" + body->toString() + "}";
 }
-Value *DoWhileStatementAST::codegen() { return nullptr; }
+
 std::string DoWhileStatementAST::toString() const {
   return R"({"type":"DoWhileStatementAST","condition":)" +
          condition->toString() + ",\"body\":" + body->toString() + "}";
 }
-Value *ForStatementAST::codegen() { return nullptr; }
+
 std::string ForStatementAST::toString() const {
   return R"({"type":"ForStatementAST","init":)" + init->toString() +
          ",\"condition\":" + condition->toString() +
          ",\"step\":" + step->toString() + ",\"body\":" + body->toString() +
          "}";
 }
-Value *BreakStatementAST::codegen() { return nullptr; }
+
 std::string BreakStatementAST::toString() const {
   // only type
   return R"({"type":"BreakStatementAST"})";
 }
-Value *ContinueStatementAST::codegen() { return nullptr; }
+
 std::string ContinueStatementAST::toString() const {
   // only type
   return R"({"type":"ContinueStatementAST"})";
 }
-Value *ReturnStatementAST::codegen() { return nullptr; }
+
 std::string ReturnStatementAST::toString() const {
   if (expr == nullptr) {
     return R"({"type":"ReturnStatementAST"})";
   }
   return R"({"type":"ReturnStatementAST","expr":)" + expr->toString() + "}";
 }
-Value *NumberExprAST::codegen() { return nullptr; }
+
 std::string NumberExprAST::toString() const {
   // valueType, value
   return R"({"type":"NumberExprAST","astType":")" + astTypeToString(type) +
          R"(","value":)" + value + "}";
 }
-Value *VariableExprAST::codegen() { return nullptr; }
+
 std::string VariableExprAST::toString() const {
   // identifier
   return R"({"type":"VariableExprAST","identifier":")" + name + "\"}";
 }
-Value *VariableIndexExprAST::codegen() { return nullptr; }
+
 std::string VariableIndexExprAST::toString() const {
   // identifier, index
   return R"({"type":"VariableIndexExprAST","identifier":")" + name +
          R"(","index":)" + index->toString() + "}";
 }
-Function *FunctionDefinitionAST::codegen() { return nullptr; }
+
 std::string FunctionDefinitionAST::toString() const {
   // prototype, body
   return R"({"type":"FunctionDefinitionAST","prototype":)" + Proto->toString() +
          ",\"body\":" + Body->toString() + "}";
 }
-Value *VariableDefinitionAST::codegen() { return nullptr; }
+
 std::string VariableDefinitionAST::toString() const {
   if (init == nullptr) {
     return R"({"type":"VariableDefinitionAST","astType":")" +
@@ -189,17 +188,18 @@ std::string VariableDefinitionAST::toString() const {
            (isConst ? "true" : "false") + R"(,"name":")" + name + "\"}";
   }
   // type, isConst, name, init
-  return R"({"type":"VariableDefinitionAST","astType":")" + astTypeToString(type) +
-         R"(","isConst":)" + (isConst ? "true" : "false") + R"(,"name":")" +
-         name + R"(","init":)" + init->toString() + "}";
+  return R"({"type":"VariableDefinitionAST","astType":")" +
+         astTypeToString(type) + R"(","isConst":)" +
+         (isConst ? "true" : "false") + R"(,"name":")" + name + R"(","init":)" +
+         init->toString() + "}";
 }
-Value *LayoutAst::codegen() { return nullptr; }
+
 std::string LayoutAst::toString() const {
   // toJson: type, layoutQualifier
   return R"({"type":"LayoutAst","astType":")" + layoutTypeToString(type) +
          R"(","layoutQualifier":)" + layoutQualifier->toString() + "}";
 }
-Value *TopLevelAST::codegen() { return nullptr; }
+
 std::string TopLevelAST::toString() const {
   // version, definitions
   std::string definitionsString = "";
@@ -216,8 +216,8 @@ std::string TopLevelAST::toString() const {
 }
 std::string FunctionArgumentAST::toString() const {
   // type, name
-  return R"({"type":"FunctionArgumentAST","astType":")" + astTypeToString(type) +
-         R"(","name":")" + name + "\"}";
+  return R"({"type":"FunctionArgumentAST","astType":")" +
+         astTypeToString(type) + R"(","name":")" + name + "\"}";
 }
 std::string SentenceAST::toString() const { return std::string(); }
 std::string DefinitionAST::toString() const { return std::string(); }
@@ -264,4 +264,18 @@ std::string LayoutQualifierAst::toString() const {
     idsString.pop_back();
   }
   return R"({"type":"LayoutQualifierAst","ids":[)" + idsString + "]}";
+}
+
+std::string SequenceExpressionAST::toString() const {
+  // toJson: expressions
+  std::string expressionsString;
+  for (auto &expression : expressions) {
+    expressionsString += expression->toString();
+    expressionsString += ",";
+  }
+  if (!expressionsString.empty()) {
+    expressionsString.pop_back();
+  }
+  return R"({"type":"SequenceExpressionAST","expressions":[)" +
+         expressionsString + "]}";
 }

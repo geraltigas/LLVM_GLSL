@@ -140,6 +140,7 @@ int gettok() {
       NumStr += std::string(1, LastChar);
       if (LastChar == 'f') {
         LastChar = advance();
+        NumVal = NumStr;
         return tok_number;
       }
       LastChar = advance();
@@ -150,7 +151,10 @@ int gettok() {
     }
 
     NumVal = NumStr;
-    return tok_number;
+    if (NumStr.find_first_of('.') != std::string::npos) {
+      return tok_number;
+    }
+    return tok_int;
   }
 
   if (LastChar == '.') {
@@ -460,7 +464,7 @@ void Tokenize() {
       tokens.emplace_back(tok_void, "void");
       break;
     case tok_int:
-      tokens.emplace_back(tok_int, "int");
+      tokens.emplace_back(tok_int, NumVal.c_str());
       break;
     case tok_uint:
       tokens.emplace_back(tok_uint, "uint");
@@ -469,10 +473,10 @@ void Tokenize() {
       tokens.emplace_back(tok_bool, "bool");
       break;
     case tok_float:
-      tokens.emplace_back(tok_float, "float");
+      tokens.emplace_back(tok_float, NumVal.c_str());
       break;
     case tok_double:
-      tokens.emplace_back(tok_double, "double");
+      tokens.emplace_back(tok_double, NumVal.c_str());
       break;
     case tok_vec2:
       tokens.emplace_back(tok_vec2, "vec2");

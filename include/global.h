@@ -6,9 +6,13 @@
 #include <iostream>
 #include <map>
 
-#define GLSL_FILE "/home/geraltigas/compilerCourse/llvm16/llvm/GLSL/test/temp.glsl"
-#define JSON_FILE "/home/geraltigas/compilerCourse/llvm16/llvm/GLSL/tempAst.json"
-#define TOKENS_FILE "/home/geraltigas/compilerCourse/llvm16/llvm/GLSL/tokens.txt"
+#define GLSL_FILE                                                              \
+  "/home/geraltigas/compilerCourse/llvm16/llvm/GLSL/test/temp.glsl"
+#define JSON_FILE                                                              \
+  "/home/geraltigas/compilerCourse/llvm16/llvm/GLSL/tempAst.json"
+#define TOKENS_FILE                                                            \
+  "/home/geraltigas/compilerCourse/llvm16/llvm/GLSL/tokens.txt"
+#define IR_FILE "/home/geraltigas/compilerCourse/llvm16/llvm/GLSL/ir.ll"
 
 #define DEBUG
 
@@ -23,7 +27,8 @@ extern uint64_t index_temp;
 #ifdef DEBUG
 #define LOG(x)                                                                 \
   std::cout << "// " << __FILE__ << ":" << __LINE__ << ":" << __FUNCTION__     \
-            << "(): now at " << std::to_string(index_temp) << " " << printTokens(index_temp)  <<" \n"                        \
+            << "(): now at " << std::to_string(index_temp) << " "              \
+            << printTokens(index_temp) << " \n"                                \
             << (x != nullptr ? x->toString() : "NULL") << std::endl;
 #else
 #define LOG(x)
@@ -31,8 +36,8 @@ extern uint64_t index_temp;
 
 #ifdef DEBUG // only print expression using toString() when DEBUG is defined
 #define LOG_EXPR(x)                                                            \
-  std::cout << "// " << __FILE__ << ":" << __LINE__ << ":" << __FUNCTION__ << " "    \
-            << (x != nullptr ? x->toString() : "NULL") << std::endl;
+  std::cout << "// " << __FILE__ << ":" << __LINE__ << ":" << __FUNCTION__     \
+            << " " << (x != nullptr ? x->toString() : "NULL") << std::endl;
 #else
 #define LOG_EXPR(x)
 #endif

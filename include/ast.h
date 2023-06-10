@@ -22,6 +22,14 @@ using namespace llvm;
 
 namespace ast {
 
+class AST {
+public:
+  virtual ~AST() = default;
+
+  virtual Value *codegen() = 0;
+  virtual std::string toString() const = 0;
+};
+
 class FunctionArgumentAST {
   AstType type;
   std::string name;
@@ -36,27 +44,31 @@ public:
   std::string toString() const;
 };
 
-class FunctionPrototypeAST {
+class FunctionPrototypeAST : public AST {
   AstType returnType;
-  std::string Name;
-  std::vector<std::unique_ptr<FunctionArgumentAST>> Args;
+  std::string name;
+  std::vector<std::unique_ptr<FunctionArgumentAST>> args;
 
 public:
   FunctionPrototypeAST(AstType returnType, std::string Name,
                        std::vector<std::unique_ptr<FunctionArgumentAST>> Args)
-      : returnType(returnType), Name(std::move(Name)), Args(std::move(Args)) {}
+      : returnType(returnType), name(std::move(Name)), args(std::move(Args)) {}
 
-  Function *codegen();
-  const std::string &getName() const { return Name; }
-  std::string toString() const;
+  Function *codegen() override;
+  const std::string &getName() const { return name; }
+  AstType getReturnType() const { return returnType; }
+  const std::vector<std::unique_ptr<FunctionArgumentAST>> &getArgs() const {
+    return args;
+  }
+  std::string toString() const override;
 };
 
-class SentenceAST {
+class SentenceAST : public AST {
 public:
   virtual ~SentenceAST() = default;
 
-  virtual Value *codegen() = 0;
-  virtual std::string toString() const;
+  Value *codegen() override = 0;
+  std::string toString() const override;
 };
 
 class SentencesAST : public SentenceAST {
@@ -109,6 +121,10 @@ public:
 
   std::string toString() const override;
 
+  ExprType getType() const { return type; }
+  std::unique_ptr<ExpressionAST> &getLHS() { return LHS; }
+  std::unique_ptr<ExpressionAST> &getRHS() { return RHS; }
+
   ~BinaryExpressionAST() override = default;
 };
 
@@ -146,6 +162,31 @@ public:
   ~PostfixExpressionAST() override = default;
 };
 
+class SequenceExpressionAST : public ExpressionAST {
+  std::vector<std::unique_ptr<ExpressionAST>> expressions;
+
+public:
+  explicit SequenceExpressionAST(
+      std::vector<std::unique_ptr<ExpressionAST>> expressions)
+      : expressions(std::move(expressions)) {}
+
+  explicit SequenceExpressionAST() {
+    expressions = std::vector<std::unique_ptr<ExpressionAST>>();
+  }
+
+  Value *codegen() override;
+
+  Value * getArgs();
+
+  std::vector<std::unique_ptr<ExpressionAST>> &getExpressions() {
+    return expressions;
+  }
+
+  std::string toString() const override;
+
+  ~SequenceExpressionAST() override = default;
+};
+
 class ExprListAST : public ExpressionAST {
   std::vector<std::unique_ptr<ExpressionAST>> expressions;
 
@@ -158,6 +199,12 @@ public:
   }
 
   Value *codegen() override;
+
+  Value *getArgs();
+
+  std::vector<std::unique_ptr<ExpressionAST>> &getExpressions() {
+    return expressions;
+  }
 
   std::string toString() const override;
 
@@ -177,21 +224,6 @@ public:
   std::string toString() const override;
 
   ~FunctionCallAST() override = default;
-};
-
-class ArrayAccessAST : public ExpressionAST {
-  std::string identifier;
-  std::unique_ptr<ExpressionAST> index;
-
-public:
-  ArrayAccessAST(std::string identifier, std::unique_ptr<ExpressionAST> index)
-      : identifier(std::move(identifier)), index(std::move(index)) {}
-
-  Value *codegen() override;
-
-  std::string toString() const override;
-
-  ~ArrayAccessAST() override = default;
 };
 
 class IfStatementAST : public SentenceAST {
@@ -287,6 +319,8 @@ public:
 
   Value *codegen() override;
 
+  // Value *codegen(SentenceAST *parent);
+
   std::string toString() const override;
 
   ~BreakStatementAST() override = default;
@@ -345,6 +379,8 @@ public:
 
   std::string toString() const override;
 
+  std::string getName() const { return name; }
+
   ~VariableExprAST() override = default;
 };
 
@@ -362,13 +398,13 @@ public:
   ~VariableIndexExprAST() override = default;
 };
 
-class DefinitionAST {
+class DefinitionAST : public AST {
 public:
   virtual ~DefinitionAST() = default;
 
-  virtual Value *codegen() = 0;
+  Value *codegen() override = 0;
 
-  virtual std::string toString() const;
+  std::string toString() const override;
 };
 
 class FunctionDefinitionAST : public DefinitionAST {
@@ -453,7 +489,7 @@ public:
   std::string toString() const;
 };
 
-class LayoutAst {
+class LayoutAst : public AST {
   LayoutType type;
   std::unique_ptr<LayoutQualifierAst> layoutQualifier;
 
@@ -462,8 +498,8 @@ public:
             std::unique_ptr<LayoutQualifierAst> layoutQualifier)
       : type(type), layoutQualifier(std::move(layoutQualifier)) {}
   ~LayoutAst() = default;
-  Value *codegen();
-  std::string toString() const;
+  Value *codegen() override;
+  std::string toString() const override;
 };
 
 class GlobalVariableDefinitionAST : public VariableDefinitionAST {
@@ -476,10 +512,12 @@ public:
       : VariableDefinitionAST(type, isConst, std::move(name), std::move(init)),
         layout(std::move(layout)) {}
 
+  Value *codegen() override;
+
   std::string toString() const override;
 };
 
-class TopLevelAST {
+class TopLevelAST : public AST {
   uint64_t version;
   std::unique_ptr<std::vector<std::unique_ptr<DefinitionAST>>> definitions;
 
@@ -488,9 +526,9 @@ public:
       uint64_t version,
       std::unique_ptr<std::vector<std::unique_ptr<DefinitionAST>>> definitions)
       : version(version), definitions(std::move(definitions)) {}
-  Value *codegen();
+  Value *codegen() override;
 
-  std::string toString() const;
+  std::string toString() const override;
 };
 } // namespace ast
 

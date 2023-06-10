@@ -4,8 +4,11 @@
 
 #include "parser.h"
 #include "tokenizer.h"
+#include "generator.h"
+#include "scope.h"
 
 extern std::unique_ptr<TopLevelAST> topLevelAst;
+extern std::set<std::shared_ptr<Scope>> scopeSet;
 
 int main() {
   initBinopPrecedence();
@@ -20,8 +23,8 @@ int main() {
   } else {
     consolePrint("accept");
   }
-
   std::cout << topLevelAst->toString() << std::endl;
-  // LOG_EXPR(topLevelAst)
-  // TheModule->print(errs(), nullptr);
+  topLevelAst->codegen();
+  codeGen(IR_FILE);
+  scopeSet.clear();
 }
