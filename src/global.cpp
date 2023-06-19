@@ -6,7 +6,6 @@
 #include "tokenizer.h"
 #include <vector>
 
-
 std::map<char, int> BinopPrecedence;
 extern std::vector<Token> tokens;
 
@@ -198,6 +197,18 @@ std::string exprTypeToString(ExprType exprType) {
     return "dot_expr";
   case sequence_expr:
     return "sequence_expr";
+  case and_expr:
+    return "and_expr";
+  case or_expr:
+    return "or_expr";
+  case xor_expr:
+    return "xor_expr";
+  case bit_and_expr:
+    return "bit_and_expr";
+  case bit_or_expr:
+    return "bit_or_expr";
+  case bit_xor_expr:
+    return "bit_xor_expr";
   default:
     return "none_expr";
   }
@@ -260,7 +271,7 @@ std::string astTypeToString(AstType astType) {
 }
 std::string printTokens(size_t index) {
   std::string str;
-  for (size_t i = index-5; i < index+5 && i < tokens.size(); i++) {
+  for (size_t i = index - 5; i < index + 5 && i < tokens.size(); i++) {
     str += " " + *tokens[i].value;
   }
   return str;

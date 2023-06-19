@@ -123,33 +123,6 @@ std::string TypeConstructorAST::toString() const {
          R"(","args":)" + args->toString() + "}";
 }
 
-std::string WhileStatementAST::toString() const {
-  // condition, body
-  return R"({"type":"WhileStatementAST","condition":)" + condition->toString() +
-         ",\"body\":" + body->toString() + "}";
-}
-
-std::string DoWhileStatementAST::toString() const {
-  return R"({"type":"DoWhileStatementAST","condition":)" +
-         condition->toString() + ",\"body\":" + body->toString() + "}";
-}
-
-std::string ForStatementAST::toString() const {
-  return R"({"type":"ForStatementAST","init":)" + init->toString() +
-         ",\"condition\":" + condition->toString() +
-         ",\"step\":" + step->toString() + ",\"body\":" + body->toString() +
-         "}";
-}
-
-std::string BreakStatementAST::toString() const {
-  // only type
-  return R"({"type":"BreakStatementAST"})";
-}
-
-std::string ContinueStatementAST::toString() const {
-  // only type
-  return R"({"type":"ContinueStatementAST"})";
-}
 
 std::string ReturnStatementAST::toString() const {
   if (expr == nullptr) {
@@ -278,4 +251,8 @@ std::string SequenceExpressionAST::toString() const {
   }
   return R"({"type":"SequenceExpressionAST","expressions":[)" +
          expressionsString + "]}";
+}
+
+std::string EmptySentenceAST::toString() const {
+  return R"({"type":"EmptySentenceAST"})";
 }

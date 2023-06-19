@@ -71,6 +71,14 @@ public:
   std::string toString() const override;
 };
 
+class EmptySentenceAST : public SentenceAST {
+public:
+  EmptySentenceAST() = default;
+
+  Value *codegen() override;
+  std::string toString() const override;
+};
+
 class SentencesAST : public SentenceAST {
   std::vector<std::unique_ptr<SentenceAST>> sentences;
 
@@ -176,7 +184,7 @@ public:
 
   Value *codegen() override;
 
-  Value * getArgs();
+  Value *getArgs();
 
   std::vector<std::unique_ptr<ExpressionAST>> &getExpressions() {
     return expressions;
@@ -260,38 +268,6 @@ public:
   ~TypeConstructorAST() override = default;
 };
 
-class WhileStatementAST : public SentenceAST {
-  std::unique_ptr<ExpressionAST> condition;
-  std::unique_ptr<SentenceAST> body;
-
-public:
-  WhileStatementAST(std::unique_ptr<ExpressionAST> condition,
-                    std::unique_ptr<SentenceAST> body)
-      : condition(std::move(condition)), body(std::move(body)) {}
-
-  Value *codegen() override;
-
-  std::string toString() const override;
-
-  ~WhileStatementAST() override = default;
-};
-
-class DoWhileStatementAST : public SentenceAST {
-  std::unique_ptr<ExpressionAST> condition;
-  std::unique_ptr<SentenceAST> body;
-
-public:
-  DoWhileStatementAST(std::unique_ptr<ExpressionAST> condition,
-                      std::unique_ptr<SentenceAST> body)
-      : condition(std::move(condition)), body(std::move(body)) {}
-
-  Value *codegen() override;
-
-  std::string toString() const override;
-
-  ~DoWhileStatementAST() override = default;
-};
-
 class ForStatementAST : public SentenceAST {
   std::unique_ptr<SentenceAST> init;
   std::unique_ptr<ExpressionAST> condition;
@@ -311,30 +287,6 @@ public:
   std::string toString() const override;
 
   ~ForStatementAST() override = default;
-};
-
-class BreakStatementAST : public SentenceAST {
-public:
-  BreakStatementAST() = default;
-
-  Value *codegen() override;
-
-  // Value *codegen(SentenceAST *parent);
-
-  std::string toString() const override;
-
-  ~BreakStatementAST() override = default;
-};
-
-class ContinueStatementAST : public SentenceAST {
-public:
-  ContinueStatementAST() = default;
-
-  Value *codegen() override;
-
-  std::string toString() const override;
-
-  ~ContinueStatementAST() override = default;
 };
 
 class ReturnStatementAST : public SentenceAST {

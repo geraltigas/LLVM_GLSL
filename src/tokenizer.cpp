@@ -48,16 +48,8 @@ int gettok() {
       return tok_if;
     if (IdentifierStr == "else")
       return tok_else;
-    if (IdentifierStr == "while")
-      return tok_while;
-    if (IdentifierStr == "do")
-      return tok_do;
     if (IdentifierStr == "for")
       return tok_for;
-    if (IdentifierStr == "break")
-      return tok_break;
-    if (IdentifierStr == "continue")
-      return tok_continue;
     if (IdentifierStr == "return")
       return tok_return;
     if (IdentifierStr == "uniform")
@@ -76,8 +68,6 @@ int gettok() {
       return tok_void;
     if (IdentifierStr == "int")
       return tok_int;
-    if (IdentifierStr == "uint")
-      return tok_uint;
     if (IdentifierStr == "bool")
       return tok_bool;
     if (IdentifierStr == "float")
@@ -90,30 +80,6 @@ int gettok() {
       return tok_vec3;
     if (IdentifierStr == "vec4")
       return tok_vec4;
-    if (IdentifierStr == "dvec2")
-      return tok_dvec2;
-    if (IdentifierStr == "dvec3")
-      return tok_dvec3;
-    if (IdentifierStr == "dvec4")
-      return tok_dvec4;
-    if (IdentifierStr == "bvec2")
-      return tok_bvec2;
-    if (IdentifierStr == "bvec3")
-      return tok_bvec3;
-    if (IdentifierStr == "bvec4")
-      return tok_bvec4;
-    if (IdentifierStr == "ivec2")
-      return tok_ivec2;
-    if (IdentifierStr == "ivec3")
-      return tok_ivec3;
-    if (IdentifierStr == "ivec4")
-      return tok_ivec4;
-    if (IdentifierStr == "uvec2")
-      return tok_uvec2;
-    if (IdentifierStr == "uvec3")
-      return tok_uvec3;
-    if (IdentifierStr == "uvec4")
-      return tok_uvec4;
     if (IdentifierStr == "mat2")
       return tok_mat2;
     if (IdentifierStr == "mat3")
@@ -151,10 +117,7 @@ int gettok() {
     }
 
     NumVal = NumStr;
-    if (NumStr.find_first_of('.') != std::string::npos) {
-      return tok_number;
-    }
-    return tok_int;
+    return tok_number;
   }
 
   if (LastChar == '.') {
@@ -396,6 +359,11 @@ void redirectInput(std::string filePath) {
   freopen(filePath.c_str(), "r", stdin);
 }
 
+void redirectOutput(std::string filePath) {
+  // clear the file
+  freopen(filePath.c_str(), "w", stdout);
+}
+
 void rediectOutput(std::string filePath) {
   // clear the file
   freopen(filePath.c_str(), "w", stdout);
@@ -433,20 +401,8 @@ void Tokenize() {
     case tok_if:
       tokens.emplace_back(tok_if, "if");
       break;
-    case tok_while:
-      tokens.emplace_back(tok_while, "while");
-      break;
-    case tok_do:
-      tokens.emplace_back(tok_do, "do");
-      break;
     case tok_for:
       tokens.emplace_back(tok_for, "for");
-      break;
-    case tok_break:
-      tokens.emplace_back(tok_break, "break");
-      break;
-    case tok_continue:
-      tokens.emplace_back(tok_continue, "continue");
       break;
     case tok_return:
       tokens.emplace_back(tok_return, "return");
@@ -464,19 +420,16 @@ void Tokenize() {
       tokens.emplace_back(tok_void, "void");
       break;
     case tok_int:
-      tokens.emplace_back(tok_int, NumVal.c_str());
-      break;
-    case tok_uint:
-      tokens.emplace_back(tok_uint, "uint");
+      tokens.emplace_back(tok_int, "int");
       break;
     case tok_bool:
       tokens.emplace_back(tok_bool, "bool");
       break;
     case tok_float:
-      tokens.emplace_back(tok_float, NumVal.c_str());
+      tokens.emplace_back(tok_float, "float");
       break;
     case tok_double:
-      tokens.emplace_back(tok_double, NumVal.c_str());
+      tokens.emplace_back(tok_double, "double");
       break;
     case tok_vec2:
       tokens.emplace_back(tok_vec2, "vec2");
@@ -486,42 +439,6 @@ void Tokenize() {
       break;
     case tok_vec4:
       tokens.emplace_back(tok_vec4, "vec4");
-      break;
-    case tok_dvec2:
-      tokens.emplace_back(tok_dvec2, "dvec2");
-      break;
-    case tok_dvec3:
-      tokens.emplace_back(tok_dvec3, "dvec3");
-      break;
-    case tok_dvec4:
-      tokens.emplace_back(tok_dvec4, "dvec4");
-      break;
-    case tok_bvec2:
-      tokens.emplace_back(tok_bvec2, "bvec2");
-      break;
-    case tok_bvec3:
-      tokens.emplace_back(tok_bvec3, "bvec3");
-      break;
-    case tok_bvec4:
-      tokens.emplace_back(tok_bvec4, "bvec4");
-      break;
-    case tok_ivec2:
-      tokens.emplace_back(tok_ivec2, "ivec2");
-      break;
-    case tok_ivec3:
-      tokens.emplace_back(tok_ivec3, "ivec3");
-      break;
-    case tok_ivec4:
-      tokens.emplace_back(tok_ivec4, "ivec4");
-      break;
-    case tok_uvec2:
-      tokens.emplace_back(tok_uvec2, "uvec2");
-      break;
-    case tok_uvec3:
-      tokens.emplace_back(tok_uvec3, "uvec3");
-      break;
-    case tok_uvec4:
-      tokens.emplace_back(tok_uvec4, "uvec4");
       break;
     case tok_mat2:
       tokens.emplace_back(tok_mat2, "mat2");

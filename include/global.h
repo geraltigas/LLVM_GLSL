@@ -48,24 +48,11 @@ enum TokenType {
   tok_void = -27,   //
   tok_bool = -28,   //
   tok_int = -29,    //
-  tok_uint = -30,   //
   tok_float = -31,  //
   tok_double = -32, //
   tok_vec2 = -33,   //
   tok_vec3 = -34,   //
   tok_vec4 = -35,   //
-  tok_dvec2 = -36,  //
-  tok_dvec3 = -37,  //
-  tok_dvec4 = -38,  //
-  tok_bvec2 = -39,  //
-  tok_bvec3 = -40,  //
-  tok_bvec4 = -41,  //
-  tok_ivec2 = -42,  //
-  tok_ivec3 = -43,  //
-  tok_ivec4 = -44,  //
-  tok_uvec2 = -45,  //
-  tok_uvec3 = -46,  //
-  tok_uvec4 = -47,  //
   tok_mat2 = -48,   //
   tok_mat3 = -49,   //
   tok_mat4 = -50,   //
@@ -86,10 +73,6 @@ enum TokenType {
   tok_if = -6,        //
   tok_else = -8,      //
   tok_for = -9,       //
-  tok_while = -16,    //
-  tok_do = -17,       //
-  tok_break = -18,    //
-  tok_continue = -19, //
   tok_return = -20,   //
 
   // operators

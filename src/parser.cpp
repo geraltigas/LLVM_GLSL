@@ -31,11 +31,7 @@ void InitializeModule() {
 }
 
 std::unique_ptr<NumberExprAST> ParseNumberExpr() {
-  if (tokens[index_temp].type != tok_number &&
-      tokens[index_temp].type != tok_int &&
-      tokens[index_temp].type != tok_float &&
-      tokens[index_temp].type != tok_double &&
-      tokens[index_temp].type != tok_uint) {
+  if (tokens[index_temp].type != tok_number) {
     return nullptr;
   }
 
@@ -138,6 +134,7 @@ std::unique_ptr<LayoutQualifierAst> ParseLayoutQualifier() {
   if (tokens[index_temp].type != tok_layout) {
     // recover
     index_temp = index_record;
+    return nullptr; // no layout qualifier
   }
   index_temp++;
 
@@ -215,9 +212,6 @@ AstType ParseType() {
   case tok_int:
     index_temp++;
     return type_int;
-  case tok_uint:
-    index_temp++;
-    return type_uint;
   case tok_float:
     index_temp++;
     return type_float;
@@ -248,42 +242,19 @@ AstType ParseType() {
   case tok_vec4:
     index_temp++;
     return type_vec4;
-  case tok_ivec2:
-    index_temp++;
-    return type_ivec2;
-  case tok_ivec3:
-    index_temp++;
-    return type_ivec3;
-  case tok_ivec4:
-    index_temp++;
-    return type_ivec4;
-  case tok_bvec2:
-    index_temp++;
-    return type_bvec2;
-  case tok_bvec3:
-    index_temp++;
-    return type_bvec3;
-  case tok_bvec4:
-    index_temp++;
-    return type_bvec4;
-  case tok_uvec2:
-    index_temp++;
-    return type_uvec2;
-  case tok_uvec3:
-    index_temp++;
-    return type_uvec3;
-  case tok_uvec4:
-    index_temp++;
-    return type_uvec4;
-  case tok_dvec2:
-    index_temp++;
-    return type_dvec2;
-  case tok_dvec3:
-    index_temp++;
-    return type_dvec3;
-  case tok_dvec4:
-    index_temp++;
-    return type_dvec4;
+  case tok_number:
+    if (tokens[index_temp].value->find('.') != std::string::npos) {
+      if (tokens[index_temp].value->find('f') != std::string::npos) {
+        index_temp++;
+        return type_float;
+      } else {
+        index_temp++;
+        return type_double;
+      }
+    } else {
+      index_temp++;
+      return type_int;
+    }
   default:
     // recover
     index_temp = index_record;
@@ -594,7 +565,6 @@ std::unique_ptr<ExpressionAST> ParsePrimaryExpression() {
   } else if (tokens[index_temp].type == tok_number ||
              tokens[index_temp].type == tok_float ||
              tokens[index_temp].type == tok_double ||
-             tokens[index_temp].type == tok_uint ||
              tokens[index_temp].type == tok_int) {
     // record
     index_record = index_temp;
@@ -1230,6 +1200,10 @@ std::unique_ptr<ExpressionAST> ParseSequenceExpression() {
     sequence_expr.push_back(std::move(expression_));
   }
 
+  if (sequence_expr.size() == 1) {
+    return std::move(sequence_expr[0]);
+  }
+
   return std::make_unique<SequenceExpressionAST>(std::move(sequence_expr));
 }
 
@@ -1269,6 +1243,10 @@ std::unique_ptr<SentenceAST> ParseSentence() {
     }
     index_temp++;
     return sentence;
+  } else if (tokens[index_temp].type == tok_semicolon) {
+    // empty sentence
+    index_temp++;
+    return std::make_unique<EmptySentenceAST>();
   }
 
   // record
@@ -1327,80 +1305,6 @@ std::unique_ptr<SentenceAST> ParseSentence() {
     }
     return std::make_unique<IfStatementAST>(
         std::move(condition), std::move(if_sentence), std::move(else_sentence));
-  }
-
-  // while statement
-  if (tokens[index_temp].type == tok_while) {
-    index_temp++;
-    if (tokens[index_temp].type != tok_left_paren) {
-      // recover
-      index_temp = index_record;
-      return nullptr;
-    }
-    index_temp++;
-    std::unique_ptr<ExpressionAST> condition = ParseExpression();
-    if (condition == nullptr) {
-      // recover
-      index_temp = index_record;
-      return nullptr;
-    }
-    if (tokens[index_temp].type != tok_right_paren) {
-      // recover
-      index_temp = index_record;
-      return nullptr;
-    }
-    index_temp++;
-    std::unique_ptr<SentenceAST> while_sentence = ParseSentence();
-    if (while_sentence == nullptr) {
-      // recover
-      index_temp = index_record;
-      return nullptr;
-    }
-    return std::make_unique<WhileStatementAST>(std::move(condition),
-                                               std::move(while_sentence));
-  }
-
-  // do while statement
-  if (tokens[index_temp].type == tok_do) {
-    index_temp++;
-    std::unique_ptr<SentenceAST> do_sentence = ParseSentence();
-    if (do_sentence == nullptr) {
-      // recover
-      index_temp = index_record;
-      return nullptr;
-    }
-    if (tokens[index_temp].type != tok_while) {
-      // recover
-      index_temp = index_record;
-      return nullptr;
-    }
-    index_temp++;
-    if (tokens[index_temp].type != tok_left_paren) {
-      // recover
-      index_temp = index_record;
-      return nullptr;
-    }
-    index_temp++;
-    std::unique_ptr<ExpressionAST> condition = ParseExpression();
-    if (condition == nullptr) {
-      // recover
-      index_temp = index_record;
-      return nullptr;
-    }
-    if (tokens[index_temp].type != tok_right_paren) {
-      // recover
-      index_temp = index_record;
-      return nullptr;
-    }
-    index_temp++;
-    if (tokens[index_temp].type != tok_semicolon) {
-      // recover
-      index_temp = index_record;
-      return nullptr;
-    }
-    index_temp++;
-    return std::make_unique<DoWhileStatementAST>(std::move(condition),
-                                                 std::move(do_sentence));
   }
 
   // for statement
@@ -1470,30 +1374,6 @@ std::unique_ptr<SentenceAST> ParseSentence() {
         std::move(for_sentence));
   }
 
-  // break statement
-  if (tokens[index_temp].type == tok_break) {
-    index_temp++;
-    if (tokens[index_temp].type != tok_semicolon) {
-      // recover
-      index_temp = index_record;
-      return nullptr;
-    }
-    index_temp++;
-    return std::make_unique<BreakStatementAST>();
-  }
-
-  // continue statement
-  if (tokens[index_temp].type == tok_continue) {
-    index_temp++;
-    if (tokens[index_temp].type != tok_semicolon) {
-      // recover
-      index_temp = index_record;
-      return nullptr;
-    }
-    index_temp++;
-    return std::make_unique<ContinueStatementAST>();
-  }
-
   // return statement
   if (tokens[index_temp].type == tok_return) {
     index_temp++;
@@ -1535,7 +1415,7 @@ std::unique_ptr<SentenceAST> ParseSentence() {
   return std::unique_ptr<ExpressionAST>(std::move(expression));
 }
 
-std::unique_ptr<SentencesAST> ParseSentences() {
+std::unique_ptr<SentencesAST> ParseSentences() { // TODO: syntax check here
   std::vector<std::unique_ptr<SentenceAST>> sentences = {};
 
   while (true) {
@@ -1591,13 +1471,13 @@ std::unique_ptr<FunctionDefinitionAST> ParseFunctionDefinition() {
 
   // parse parameters
   while (true) {
-    // record
-    index_record = index_temp;
+
     if (tokens[index_temp].type == tok_right_paren) {
       index_temp++;
       break;
     }
-
+    // record
+    index_record = index_temp;
     index_temp++;
     TokenType tokenType = tokens[index_temp].type;
     // parse
@@ -1676,14 +1556,15 @@ int ParseVersion() {
   uint64_t index_record = index_temp;
   if (tokens[index_temp].type == tok_version) { // version
     index_temp++;
-    if (tokens[index_temp].type != tok_int) {
-      index_temp = index_record;
-      return -1;
-    } else {
+    // find the '.' and 'f' in the string
+    std::string version_string = *tokens[index_temp].value;
+    std::size_t dot_index = version_string.find('.');
+    std::size_t f_index = version_string.find('f');
+    if (dot_index == std::string::npos && f_index == std::string::npos) {
       version = std::stoi(tokens[index_temp].value->c_str());
-      index_temp++;
     }
   }
+  index_temp++;
   return version;
 }
 
@@ -1691,10 +1572,13 @@ std::unique_ptr<std::vector<std::unique_ptr<DefinitionAST>>>
 ParseDefinitions() {
   std::unique_ptr<std::vector<std::unique_ptr<DefinitionAST>>> definitionASTs =
       std::make_unique<std::vector<std::unique_ptr<DefinitionAST>>>();
+  definitionASTs->push_back(std::make_unique<GlobalVariableDefinitionAST>(
+      type_vec4, false, "gl_Position", nullptr, nullptr));
   while (true) {
     if (tokens[index_temp].type == tok_eof) { // end
       return definitionASTs;
     }
+    // record
     uint64_t index_record = index_temp;
     std::unique_ptr<FunctionDefinitionAST> functionAST =
         ParseFunctionDefinition();
@@ -1721,7 +1605,8 @@ ParseDefinitions() {
 
 int parseAST() {
   int version = 0;
-  std::unique_ptr<std::vector<std::unique_ptr<DefinitionAST>>> definitionASTs;
+  std::unique_ptr<std::vector<std::unique_ptr<DefinitionAST>>> definitionASTs =
+      std::make_unique<std::vector<std::unique_ptr<DefinitionAST>>>();
 
   if (tokens[index_temp].type == tok_eof) { // end
     return 0;
@@ -1735,12 +1620,9 @@ int parseAST() {
 
   definitionASTs = ParseDefinitions();
 
-  if (definitionASTs == nullptr || definitionASTs->size() == 0) {
+  if (definitionASTs == nullptr || definitionASTs->empty()) {
     return -1;
   }
-
-  // inject default global variable
-  definitionASTs->push_back(std::make_unique<GlobalVariableDefinitionAST>(type_vec4, false,"gl_Position",nullptr,nullptr));
 
   topLevelAst =
       std::make_unique<TopLevelAST>(version, std::move(definitionASTs));

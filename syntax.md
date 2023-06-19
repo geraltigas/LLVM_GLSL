@@ -22,19 +22,15 @@ sentence :=
 	variable_definition ';'
 	'if' '(' expression ')' sentence
 	'if' '(' expression ')' sentence 'else' sentence
-	'while' '(' expression ')' sentence
-	'do' sentence 'while' '(' expression ')' ';'
 	'for' '(' sentence ';' expression ';' expression ')' sentence
-	'break' ';'
-	'continue' ';'
+	'for' '(' variable_definition ';' expression ';' expression ')' sentence
 	'return' ';'
 	'return' expression ';'
+	';'
 
 variable_definition :=
 	TYPE identifier '=' expression
 	'const' TYPE identifier '=' expression
-
-`   
 
 expression :=
     sequence_expression

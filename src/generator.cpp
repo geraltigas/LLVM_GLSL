@@ -405,26 +405,28 @@ Value *PostfixExpressionAST::codegen() {
   case dot_expr:
     varExpr = (VariableExprAST *)LHS.get();
     varName = varExpr->getName();
-    if (varName == "x") {
+    if (identifier == "x") {
       index = 0;
     }
-    if (varName == "y") {
+    if (identifier == "y") {
       index = 1;
     }
-    if (varName == "z") {
+    if (identifier == "z") {
       index = 2;
     }
-    if (varName == "w") {
+    if (identifier == "w") {
       index = 3;
     }
     if (index == -1) {
       printf("Error: unknown identifier\n");
       return nullptr;
     }
-    var = currentScope->getIndentifier(identifier)->second;
+    var = currentScope->getIndentifier(varName)->second;
+    // create Vector type
     oldValue = Builder->CreateLoad(
-        getTypeFromAstType(currentScope->getIndentifier(identifier)->first),
-        var, "oldvalue");
+        getTypeFromAstType(currentScope->getIndentifier(varName)->first), var,
+        "oldvalue");
+    // using index to get the value
     newValue = Builder->CreateExtractElement(oldValue, index, "newvalue");
     return newValue;
   default:
@@ -474,8 +476,29 @@ Value *SequenceExpressionAST::getArgs() {
   Type *vecType = VectorType::get(firstType, expressions.size(), false);
   Value *vecValue = UndefValue::get(vecType);
   for (int i = 0; i < expressions.size(); i++) {
-    vecValue =
-        Builder->CreateInsertElement(vecValue, expressions[i]->codegen(), i);
+    Value *newValue = expressions[i]->codegen();
+    // type cast
+    if (newValue->getType() != firstType) {
+      // check whether the type is castable
+      if (newValue->getType()->isIntegerTy() &&
+          firstType->isIntegerTy()) { // int to int
+        newValue =
+            Builder->CreateIntCast(newValue, firstType, false, "intcast");
+      } else if (newValue->getType()->isIntegerTy() &&
+                 firstType->isFloatingPointTy()) { // int to float
+        newValue = Builder->CreateSIToFP(newValue, firstType, "intcast");
+      } else if (newValue->getType()->isFloatingPointTy() &&
+                 firstType->isIntegerTy()) { // float to int
+        newValue = Builder->CreateFPToSI(newValue, firstType, "intcast");
+      } else if (newValue->getType()->isFloatingPointTy() &&
+                 firstType->isFloatingPointTy()) { // float to float
+        newValue = Builder->CreateFPCast(newValue, firstType, "intcast");
+      } else {
+        printf("Error: cannot cast type\n");
+        return nullptr;
+      }
+    }
+    vecValue = Builder->CreateInsertElement(vecValue, newValue, i);
   }
 
   Value *vecAlloc = Builder->CreateAlloca(vecType);
@@ -580,162 +603,6 @@ Value *IfStatementAST::codegen() {
   if (ElseBB)
     PN->addIncoming(ElseV, ElseBB);
   return PN;
-}
-
-Value *WhileStatementAST::codegen() {
-  Function *function = Builder->GetInsertBlock()->getParent();
-  BasicBlock *loopBB = BasicBlock::Create(*TheContext, "loop", function);
-  Builder->CreateBr(loopBB);
-  Builder->SetInsertPoint(loopBB);
-
-  Value *condValue = condition->codegen();
-  if (!condValue)
-    return nullptr;
-
-  BasicBlock *bodyBlock =
-      BasicBlock::Create(*TheContext, "while.body", function);
-  BasicBlock *endBlock = BasicBlock::Create(*TheContext, "while.end", function);
-
-  Builder->CreateCondBr(condValue, bodyBlock, endBlock);
-
-  Builder->SetInsertPoint(bodyBlock);
-  Value *bodyValue = body->codegen();
-  if (!bodyValue)
-    return nullptr;
-
-  Builder->CreateBr(loopBB);
-
-  Builder->SetInsertPoint(endBlock);
-
-  return Constant::getNullValue(Type::getDoubleTy(*TheContext));
-}
-
-Value *DoWhileStatementAST::codegen() {
-  Function *function = Builder->GetInsertBlock()->getParent();
-  BasicBlock *bodyBlock =
-      BasicBlock::Create(*TheContext, "dowhile.body", function);
-  Builder->CreateBr(bodyBlock);
-
-  Builder->SetInsertPoint(bodyBlock);
-  Value *bodyValue = body->codegen();
-  if (!bodyValue)
-    return nullptr;
-
-  Value *condValue = condition->codegen();
-  if (!condValue)
-    return nullptr;
-
-  BasicBlock *endBlock =
-      BasicBlock::Create(*TheContext, "dowhile.end", function);
-  BasicBlock *contBlock =
-      BasicBlock::Create(*TheContext, "dowhile.cont", function);
-
-  Builder->CreateCondBr(condValue, contBlock, endBlock);
-
-  Builder->SetInsertPoint(contBlock);
-
-  return Constant::getNullValue(Type::getDoubleTy(*TheContext));
-}
-
-Value *ForStatementAST::codegen() {
-  Function *function = Builder->GetInsertBlock()->getParent();
-  BasicBlock *headerBlock =
-      BasicBlock::Create(*TheContext, "for.header", function);
-  Builder->CreateBr(headerBlock);
-  Builder->SetInsertPoint(headerBlock);
-
-  Value *initValue = init->codegen();
-
-  BasicBlock *condBlock = BasicBlock::Create(*TheContext, "for.cond", function);
-  Builder->CreateBr(condBlock);
-  Builder->SetInsertPoint(condBlock);
-
-  Value *condValue = condition->codegen();
-  if (!condValue)
-    return nullptr;
-
-  BasicBlock *bodyBlock = BasicBlock::Create(*TheContext, "for.body", function);
-  BasicBlock *endBlock = BasicBlock::Create(*TheContext, "for.end", function);
-
-  Builder->CreateCondBr(condValue, bodyBlock, endBlock);
-
-  Builder->SetInsertPoint(bodyBlock);
-  Value *bodyValue = body->codegen();
-  if (!bodyValue)
-    return nullptr;
-
-  step->codegen();
-
-  Builder->CreateBr(condBlock);
-
-  Builder->SetInsertPoint(endBlock);
-
-  return Constant::getNullValue(Type::getDoubleTy(*TheContext));
-}
-
-Value *BreakStatementAST::codegen() {
-  // Get the current function and basic block
-  BasicBlock *currBlock = Builder->GetInsertBlock();
-
-  // Look for the nearest enclosing loop or switch statement
-  for (BasicBlock *bb = currBlock; bb; bb = bb->getPrevNode()) {
-    // Check if the current block ends with a terminator instruction
-    if (!bb->empty() && bb->back().isTerminator()) {
-      // Check if the terminator is a branch instruction
-      if (auto *branchInst = dyn_cast<BranchInst>(&bb->back())) {
-        // Check if the branch instruction jumps to the end of a loop or
-        // switch statement
-        if (branchInst->isUnconditional() &&
-            branchInst->getSuccessor(0) != currBlock) {
-          // Insert a new branch instruction to jump to the end of the
-          // loop or switch statement
-          Builder->CreateBr(branchInst->getSuccessor(0));
-          return nullptr;
-        }
-      }
-      // Check if the terminator is a switch instruction
-      else if (auto *switchInst = dyn_cast<SwitchInst>(&bb->back())) {
-        // Insert a new branch instruction to jump to the default case
-        // (which should be the end of the switch statement)
-        Builder->CreateBr(switchInst->getDefaultDest());
-        return nullptr;
-      }
-    }
-  }
-
-  // If we reach this point, then there is no enclosing loop or switch
-  // statement Emit an error message and return nullptr
-  printf("break statement not inside a loop or switch statement");
-  return nullptr;
-}
-
-Value *ContinueStatementAST::codegen() {
-  // Get the current function and basic block
-  Function *func = Builder->GetInsertBlock()->getParent();
-  BasicBlock *currBlock = Builder->GetInsertBlock();
-
-  // Look for the nearest enclosing loop statement
-  for (BasicBlock *bb = currBlock; bb; bb = bb->getPrevNode()) {
-    // Check if the current block ends with a terminator instruction
-    if (!bb->empty() && bb->back().isTerminator()) {
-      // Check if the terminator is a branch instruction
-      if (auto *branchInst = dyn_cast<BranchInst>(&bb->back())) {
-        // Check if the branch instruction jumps to the beginning of a
-        // loop statement
-        if (branchInst->isUnconditional() &&
-            branchInst->getSuccessor(0) != currBlock) {
-          // Insert a new branch instruction to jump to the beginning of
-          // the loop statement
-          Builder->CreateBr(branchInst->getSuccessor(0));
-          return nullptr;
-        }
-      }
-    }
-  }
-
-  // If there is no enclosing loop statement, throw an error
-  printf("continue statement not inside a loop statement");
-  return nullptr;
 }
 
 Value *ReturnStatementAST::codegen() {
@@ -856,8 +723,6 @@ Value *VariableIndexExprAST::codegen() {
   return elementPtr;
 }
 
-
-
 Function *FunctionDefinitionAST::codegen() {
   // Create scope
   std::shared_ptr<Scope> scope = std::make_shared<Scope>(currentScope);
@@ -923,5 +788,10 @@ Value *TopLevelAST::codegen() {
   for (auto &stmt : *definitions) {
     stmt->codegen();
   }
+  return nullptr;
+}
+
+Value *EmptySentenceAST::codegen() {
+  // do nothing
   return nullptr;
 }
