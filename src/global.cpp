@@ -61,7 +61,8 @@ bool isMultiplicative(TokenType token) {
 }
 bool isPrefix(TokenType token) {
   return token == tok_plus_p || token == tok_minus_m ||
-         token == tok_exclamation || token == tok_tilde;
+         token == tok_exclamation || token == tok_tilde || token == tok_plus ||
+         token == tok_minus;
 }
 bool isPostfix(TokenType token) {
   return token == tok_plus_p || token == tok_minus_m || token == tok_dot;
@@ -233,30 +234,6 @@ std::string astTypeToString(AstType astType) {
     return "vec3";
   case type_vec4:
     return "vec4";
-  case type_dvec2:
-    return "dvec2";
-  case type_dvec3:
-    return "dvec3";
-  case type_dvec4:
-    return "dvec4";
-  case type_bvec2:
-    return "bvec2";
-  case type_bvec3:
-    return "bvec3";
-  case type_bvec4:
-    return "bvec4";
-  case type_ivec2:
-    return "ivec2";
-  case type_ivec3:
-    return "ivec3";
-  case type_ivec4:
-    return "ivec4";
-  case type_uvec2:
-    return "uvec2";
-  case type_uvec3:
-    return "uvec3";
-  case type_uvec4:
-    return "uvec4";
   case type_mat2:
     return "mat2";
   case type_mat3:

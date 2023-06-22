@@ -38,7 +38,6 @@ file(GLOB SRC_FILES
         src/*.cpp
         ./main.cpp)
 
-
 include_directories(
         include
 )

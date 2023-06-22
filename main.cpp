@@ -17,7 +17,7 @@ int main(int argc,char *argv[]) {
 
   Tokenize();
   printTokens();
-  //InitializeModule();
+  InitializeModule();
 
   if (parseAST() < 0) {
     consolePrint("reject");

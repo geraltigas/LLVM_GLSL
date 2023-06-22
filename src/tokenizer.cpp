@@ -531,6 +531,9 @@ void Tokenize() {
     case tok_bit_or:
       tokens.emplace_back(tok_bit_or, "|");
       break;
+    case tok_bit_xor:
+      tokens.emplace_back(tok_bit_xor, "^");
+      break;
     case tok_left_shift:
       tokens.emplace_back(tok_left_shift, "<<");
       break;

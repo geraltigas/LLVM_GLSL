@@ -21,6 +21,8 @@ extern std::map<std::string, Value *> NamedValues;
 
 using namespace ast;
 
+std::unique_ptr<ExpressionAST> ParseAssignmentExpression();
+
 void InitializeModule() {
   // Open a new context and module.
   TheContext = std::make_unique<LLVMContext>();
@@ -448,7 +450,7 @@ std::unique_ptr<ExprListAST> ParseExprList() {
   // record
   uint64_t index_record = index_temp;
   // parse
-  std::unique_ptr<ExpressionAST> expression = ParseExpression();
+  std::unique_ptr<ExpressionAST> expression = ParseAssignmentExpression();
   if (expression == nullptr) {
     // recover
     index_temp = index_record;
@@ -464,7 +466,7 @@ std::unique_ptr<ExprListAST> ParseExprList() {
     index_record = index_temp;
     // parse
     index_temp++;
-    expression = ParseExpression();
+    expression = ParseAssignmentExpression();
     if (expression == nullptr) {
       // recover
       index_temp = index_record;
@@ -472,6 +474,11 @@ std::unique_ptr<ExprListAST> ParseExprList() {
     }
     expr_list.push_back(std::move(expression));
   }
+
+//  if (expr_list.size() == 1) {
+//    return std::make_unique<ExprListAST>(std::move(
+//        ((SequenceExpressionAST *)(expr_list[0].release()))->getExpressions()));
+//  }
 
   return std::make_unique<ExprListAST>(std::move(expr_list));
 }
@@ -492,9 +499,9 @@ std::unique_ptr<ExpressionAST> ParsePrimaryExpression() {
     }
 
     if (tokens[index_temp].type == tok_left_paren) {
+      index_temp++;
       // record
       index_record = index_temp;
-      index_temp++;
       // parse
       std::unique_ptr<ExprListAST> expr_list = ParseExprList();
       if (expr_list == nullptr) {
@@ -510,6 +517,7 @@ std::unique_ptr<ExpressionAST> ParsePrimaryExpression() {
       return std::make_unique<FunctionCallAST>(std::string(name->c_str()),
                                                std::move(expr_list));
     } else if (tokens[index_temp].type == tok_left_bracket) {
+      index_temp++;
       // record
       index_record = index_temp;
       // parse

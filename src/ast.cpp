@@ -123,7 +123,6 @@ std::string TypeConstructorAST::toString() const {
          R"(","args":)" + args->toString() + "}";
 }
 
-
 std::string ReturnStatementAST::toString() const {
   if (expr == nullptr) {
     return R"({"type":"ReturnStatementAST"})";
@@ -255,4 +254,11 @@ std::string SequenceExpressionAST::toString() const {
 
 std::string EmptySentenceAST::toString() const {
   return R"({"type":"EmptySentenceAST"})";
+}
+std::string ForStatementAST::toString() const {
+  // toJson: init, condition, increment, body
+  return R"({"type":"ForStatementAST","init":)" + init->toString() +
+         ",\"condition\":" + condition->toString() +
+         ",\"step\":" + step->toString(),
+         ",\"body\":" + body->toString() + "}";
 }

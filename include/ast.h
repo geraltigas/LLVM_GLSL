@@ -206,17 +206,15 @@ public:
     expressions = std::vector<std::unique_ptr<ExpressionAST>>();
   }
 
-  Value *codegen() override;
-
-  Value *getArgs();
-
   std::vector<std::unique_ptr<ExpressionAST>> &getExpressions() {
     return expressions;
   }
 
-  std::string toString() const override;
+  Value *codegen() override;
 
-  ~ExprListAST() override = default;
+  std::string toString() const;
+
+  ~ExprListAST() = default;
 };
 
 class FunctionCallAST : public ExpressionAST {
@@ -261,11 +259,13 @@ public:
   TypeConstructorAST(AstType type, std::unique_ptr<ExprListAST> args)
       : type(type), args(std::move(args)) {}
 
+  std::unique_ptr<ExprListAST> &getArgs() { return args; }
+
   Value *codegen() override;
 
-  std::string toString() const override;
+  std::string toString() const;
 
-  ~TypeConstructorAST() override = default;
+  ~TypeConstructorAST() = default;
 };
 
 class ForStatementAST : public SentenceAST {
