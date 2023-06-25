@@ -1,7 +1,3 @@
-//
-// Created by jb030 on 13/05/2023.
-//
-
 #include "ast.h"
 
 using namespace ast;
@@ -37,6 +33,7 @@ std::string ast::layoutIdentifierToString(LayoutIdentifier id) {
 
 std::string ConditionalExpressionAST::toString() const {
   // toJson
+  // there is a function called getReturnType
   return R"({"type":"ConditionalExpressionAST","condition":)" +
          condition->toString() + ",\"then\":" + then->toString() +
          ",\"else\":" + else_->toString() + "}";
@@ -258,7 +255,7 @@ std::string EmptySentenceAST::toString() const {
 std::string ForStatementAST::toString() const {
   // toJson: init, condition, increment, body
   return R"({"type":"ForStatementAST","init":)" + init->toString() +
-         ",\"condition\":" + condition->toString() +
-         ",\"step\":" + step->toString(),
+             ",\"condition\":" + condition->toString() +
+             ",\"step\":" + step->toString(),
          ",\"body\":" + body->toString() + "}";
 }

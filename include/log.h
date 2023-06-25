@@ -1,7 +1,3 @@
-//
-// Created by jb030 on 13/05/2023.
-//
-
 #ifndef LLVM_LOG_H
 
 #include <iostream>

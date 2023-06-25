@@ -1,7 +1,3 @@
-//
-// Created by jb030 on 12/05/2023.
-//
-
 #ifndef LLVM_PARSER_H
 
 #include <memory>

@@ -1,7 +1,3 @@
-//
-// Created by jb030 on 13/05/2023.
-//
-
 #include "global.h"
 #include "tokenizer.h"
 #include <vector>
@@ -222,8 +218,6 @@ std::string astTypeToString(AstType astType) {
     return "bool";
   case type_int:
     return "int";
-  case type_uint:
-    return "uint";
   case type_float:
     return "float";
   case type_double:

@@ -12,8 +12,8 @@
 #llvm_map_components_to_libnames(llvm_libs core orcjit support nativecodegen)
 #include_directories(include)
 #file(GLOB SRC_FILES src/*.cpp main.cpp)
-#add_executable(GLSLParser ${SRC_FILES})
-#target_link_libraries(GLSLParser PUBLIC ${llvm_libs})
+#add_executable(GLSLCompiler ${SRC_FILES})
+#target_link_libraries(GLSLCompiler PUBLIC ${llvm_libs})
 
 
 set(LLVM_LINK_COMPONENTS
@@ -44,5 +44,4 @@ include_directories(
 
 add_GLSL(GLSLParser
         ${SRC_FILES})
-
 

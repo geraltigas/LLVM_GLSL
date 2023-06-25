@@ -1,12 +1,9 @@
-//
-// Created by jb030 on 13/05/2023.
-//
-
 #ifndef LLVM_AST_H
 
 #include <utility>
 
 #include "global.h"
+#include "scope.h"
 #include "llvm/ADT/APFloat.h"
 #include "llvm/IR/BasicBlock.h"
 #include "llvm/IR/Constants.h"
@@ -19,6 +16,8 @@
 #include "llvm/IR/Verifier.h"
 
 using namespace llvm;
+
+extern std::shared_ptr<Scope> currentScope;
 
 namespace ast {
 
@@ -69,6 +68,7 @@ public:
 
   Value *codegen() override = 0;
   std::string toString() const override;
+  virtual bool isReturn() const { return false; }
 };
 
 class EmptySentenceAST : public SentenceAST {
@@ -77,6 +77,7 @@ public:
 
   Value *codegen() override;
   std::string toString() const override;
+  bool isReturn() const override { return false; }
 };
 
 class SentencesAST : public SentenceAST {
@@ -88,13 +89,31 @@ public:
 
   Value *codegen() override;
   std::string toString() const override;
+
+  std::vector<std::unique_ptr<SentenceAST>> &getSentences() {
+    return sentences;
+  }
+  bool isReturn() const override {
+    for (auto &sentence : sentences) {
+      if (sentence->isReturn())
+        return true;
+    }
+    return false;
+  }
 };
 
 class ExpressionAST : public SentenceAST {
+protected:
+  AstType returnType = type_error;
+
 public:
   ~ExpressionAST() override = default;
 
+  void setReturnType(AstType type) { returnType = type; }
+  virtual AstType getReturnType() const { return returnType; }
+
   Value *codegen() override = 0;
+  bool isReturn() const override { return false; }
 };
 
 class ConditionalExpressionAST : public ExpressionAST {
@@ -109,11 +128,21 @@ public:
       : condition(std::move(condition)), then(std::move(then)),
         else_(std::move(else_)) {}
 
+  AstType getReturnType() const override {
+    if (returnType != type_error)
+      return returnType;
+    if (then != nullptr && else_ != nullptr)
+      return then->getReturnType();
+  }
+
   Value *codegen() override;
 
   std::string toString() const override;
 
   ~ConditionalExpressionAST() override = default;
+  bool isReturn() const override {
+    return then->isReturn() && else_->isReturn();
+  }
 };
 
 class BinaryExpressionAST : public ExpressionAST {
@@ -125,6 +154,13 @@ public:
                       std::unique_ptr<ExpressionAST> RHS)
       : type(type), LHS(std::move(LHS)), RHS(std::move(RHS)) {}
 
+  AstType getReturnType() const override {
+    if (returnType != type_error)
+      return returnType;
+    if (LHS != nullptr && RHS != nullptr)
+      return LHS->getReturnType();
+  }
+
   Value *codegen() override;
 
   std::string toString() const override;
@@ -134,6 +170,8 @@ public:
   std::unique_ptr<ExpressionAST> &getRHS() { return RHS; }
 
   ~BinaryExpressionAST() override = default;
+
+  bool isReturn() const override { return LHS->isReturn() && RHS->isReturn(); }
 };
 
 class PrefixExpressionAST : public ExpressionAST {
@@ -144,11 +182,29 @@ public:
   PrefixExpressionAST(ExprType type, std::unique_ptr<ExpressionAST> RHS)
       : type(type), RHS(std::move(RHS)) {}
 
+  AstType getReturnType() const override {
+    switch (type) {
+    case plus_p_expr:
+    case minus_m_expr:
+    case plus_expr:
+    case minus_expr:
+    case tilde_expr:
+      return RHS->getReturnType();
+      break;
+    case not_expr:
+      return type_int;
+    default:
+      return type_error;
+    }
+  }
+
   Value *codegen() override;
 
   std::string toString() const override;
 
   ~PrefixExpressionAST() override = default;
+
+  bool isReturn() const override { return RHS->isReturn(); }
 };
 
 class PostfixExpressionAST : public ExpressionAST {
@@ -160,12 +216,26 @@ public:
   PostfixExpressionAST(ExprType type, std::unique_ptr<ExpressionAST> LHS)
       : type(type), LHS(std::move(LHS)) {}
 
+  AstType getReturnType() const override {
+    switch (type) {
+    case plus_p_expr:
+    case minus_m_expr:
+      return type_int;
+    case dot_expr:
+      return type_float;
+    default:
+      return type_error;
+    }
+  }
+
   void setIdentifier(const std::string &identifier) {
     this->identifier = identifier;
   }
   Value *codegen() override;
 
   std::string toString() const override;
+
+  bool isReturn() const override { return LHS->isReturn(); }
 
   ~PostfixExpressionAST() override = default;
 };
@@ -177,6 +247,22 @@ public:
   explicit SequenceExpressionAST(
       std::vector<std::unique_ptr<ExpressionAST>> expressions)
       : expressions(std::move(expressions)) {}
+
+  AstType getReturnType() const override {
+    if (returnType != type_error)
+      return returnType;
+    if (expressions.size() > 0)
+      return expressions.back()->getReturnType();
+    return type_error;
+  }
+
+  bool isReturn() const override {
+    for (auto &expression : expressions) {
+      if (expression->isReturn())
+        return true;
+    }
+    return false;
+  }
 
   explicit SequenceExpressionAST() {
     expressions = std::vector<std::unique_ptr<ExpressionAST>>();
@@ -202,6 +288,21 @@ public:
   explicit ExprListAST(std::vector<std::unique_ptr<ExpressionAST>> expressions)
       : expressions(std::move(expressions)) {}
 
+  AstType getReturnType() const override {
+    if (returnType != type_error)
+      return returnType;
+    if (expressions.size() > 0)
+      return expressions.back()->getReturnType();
+  }
+
+  bool isReturn() const override {
+    for (auto &expression : expressions) {
+      if (expression->isReturn())
+        return true;
+    }
+    return false;
+  }
+
   explicit ExprListAST() {
     expressions = std::vector<std::unique_ptr<ExpressionAST>>();
   }
@@ -224,6 +325,19 @@ class FunctionCallAST : public ExpressionAST {
 public:
   FunctionCallAST(std::string callee, std::unique_ptr<ExprListAST> args)
       : callee(std::move(callee)), args(std::move(args)) {}
+
+  AstType getReturnType() const override {
+    if (returnType != type_error)
+      return returnType;
+    if (args != nullptr)
+      return args->getReturnType();
+  }
+
+  bool isReturn() const override {
+    if (args != nullptr)
+      return args->isReturn();
+    return false;
+  }
 
   Value *codegen() override;
 
@@ -248,6 +362,12 @@ public:
 
   std::string toString() const override;
 
+  bool isReturn() const override {
+    if (then != nullptr && else_ != nullptr)
+      return then->isReturn() && else_->isReturn();
+    return false;
+  }
+
   ~IfStatementAST() override = default;
 };
 
@@ -257,9 +377,17 @@ class TypeConstructorAST : public ExpressionAST {
 
 public:
   TypeConstructorAST(AstType type, std::unique_ptr<ExprListAST> args)
-      : type(type), args(std::move(args)) {}
+      : type(type), args(std::move(args)) {
+    setReturnType(type);
+  }
 
   std::unique_ptr<ExprListAST> &getArgs() { return args; }
+
+  bool isReturn() const override {
+    if (args != nullptr)
+      return args->isReturn();
+    return false;
+  }
 
   Value *codegen() override;
 
@@ -284,6 +412,12 @@ public:
 
   Value *codegen() override;
 
+  bool isReturn() const override {
+    if (body != nullptr)
+      return body->isReturn();
+    return false;
+  }
+
   std::string toString() const override;
 
   ~ForStatementAST() override = default;
@@ -299,6 +433,8 @@ public:
   // void return
   ReturnStatementAST() : expr(nullptr) {}
 
+  bool isReturn() const { return true; }
+
   Value *codegen() override;
 
   std::string toString() const override;
@@ -312,10 +448,17 @@ class NumberExprAST : public ExpressionAST {
 
 public:
   NumberExprAST(std::string value, AstType type)
-      : value(std::move(value)), type(type) {}
+      : value(std::move(value)), type(type) {
+    setReturnType(type);
+  }
+
+  AstType getReturnType() const override { return type; }
+
   AstType getType() const { return type; }
   std::string getValue() const { return value; }
   Value *codegen() override;
+
+  bool isReturn() const override { return false; }
 
   std::string toString() const override;
 
@@ -327,7 +470,14 @@ class VariableExprAST : public ExpressionAST {
 
 public:
   explicit VariableExprAST(std::string name) : name(std::move(name)) {}
+
+  AstType getReturnType() const {
+    return currentScope->getIndentifier(name)->first;
+  }
+
   Value *codegen() override;
+
+  bool isReturn() const override { return false; }
 
   std::string toString() const override;
 
@@ -343,7 +493,26 @@ class VariableIndexExprAST : public ExpressionAST {
 public:
   VariableIndexExprAST(std::string name, std::unique_ptr<ExpressionAST> index)
       : name(std::move(name)), index(std::move(index)) {}
+
+  AstType getReturnType() const override {
+    if (returnType != type_error) {
+      return returnType;
+    }
+    switch (currentScope->getIndentifier(name)->first) {
+    case type_mat2:
+      return type_vec2;
+    case type_mat3:
+      return type_vec3;
+    case type_mat4:
+      return type_vec4;
+    default:
+      return type_error;
+    }
+  }
+
   Value *codegen() override;
+
+  bool isReturn() const override { return false; }
 
   std::string toString() const override;
 
@@ -381,6 +550,7 @@ public:
   std::string toString() const override;
 
   ~FunctionDefinitionAST() override = default;
+  void checkAndInsertVoidReturn(Function *);
 };
 
 class VariableDefinitionAST : public DefinitionAST, public SentenceAST {
@@ -399,6 +569,8 @@ public:
   Value *codegen() override;
 
   std::string toString() const override;
+
+  bool isReturn() const override { return false; }
 
   ~VariableDefinitionAST() override = default;
 };
@@ -466,6 +638,8 @@ public:
 
   Value *codegen() override;
 
+  bool isReturn() const override { return false; }
+
   std::string toString() const override;
 };
 
@@ -483,7 +657,6 @@ public:
   std::string toString() const override;
 };
 } // namespace ast
-
 #define LLVM_AST_H
 
 #endif // LLVM_AST_H

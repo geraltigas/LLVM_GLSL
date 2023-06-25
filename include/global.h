@@ -1,7 +1,3 @@
-//
-// Created by jb030 on 12/05/2023.
-//
-
 #ifndef LLVM_GLOBAL_H
 #include <iostream>
 #include <map>
@@ -193,7 +189,6 @@ enum AstType {
   type_void = -1,
   type_bool = -2,
   type_int = -3, // default
-  type_uint = -4,
   type_float = -5, // default
   type_double = -6,
   type_vec2 = -7,

@@ -1,6 +1,8 @@
-#version 540
+#version 330
 
+vec4 FragColor;
 
-vec3 get_vec3() {
-    return vec3(1.0, 2.0, 3.0);
+void main()
+{
+    FragColor = vec4(1.0f, 0.5f, 0.2f, 1.0f);
 }

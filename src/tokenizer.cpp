@@ -1,6 +1,3 @@
-//
-// Created by jb030 on 12/05/2023.
-//
 #include "tokenizer.h"
 #include <vector>
 

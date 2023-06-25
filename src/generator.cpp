@@ -1,7 +1,3 @@
-//
-// Created by jb030 on 04/06/2023.
-//
-
 #include "generator.h"
 #include "ast.h"
 #include "scope.h"
@@ -47,8 +43,6 @@ Type *getTypeFromAstType(AstType type) {
   case type_int:
     return Type::getInt32Ty(*TheContext);
   case type_bool:
-    return Type::getInt1Ty(*TheContext);
-  case type_uint:
     return Type::getInt32Ty(*TheContext);
   case type_float:
     return Type::getFloatTy(*TheContext);
@@ -77,22 +71,20 @@ Type *getTypeFromAstType(AstType type) {
 Type *getPtrTypeFromAstType(AstType type) {
   switch (type) {
   case type_int:
-    return PointerType::getUnqual(Type::getInt32Ty(*TheContext));
+    return Type::getInt32Ty(*TheContext);
   case type_bool:
-    return PointerType::getUnqual(Type::getInt1Ty(*TheContext));
-  case type_uint:
-    return PointerType::getUnqual(Type::getInt32Ty(*TheContext));
+    return Type::getInt1Ty(*TheContext);
   case type_float:
-    return PointerType::getUnqual(Type::getFloatTy(*TheContext));
+    return Type::getFloatTy(*TheContext);
   case type_double:
-    return PointerType::getUnqual(Type::getDoubleTy(*TheContext));
+    return Type::getDoubleTy(*TheContext);
   case type_vec2:
   case type_vec3:
   case type_vec4:
   case type_mat2:
   case type_mat3:
   case type_mat4:
-    return PointerType::getUnqual(Type::getFloatTy(*TheContext));
+    return Type::getFloatPtrTy(*TheContext);
   case type_void:
     return Type::getVoidTy(*TheContext);
   default:
@@ -101,8 +93,81 @@ Type *getPtrTypeFromAstType(AstType type) {
   }
 }
 
+Value *getPtrFromPtrOrVector(Value *value) {
+  if (value->getType()->isPointerTy())
+    return value;
+  else {
+    // get ptr of the first element of the vector
+    auto *vecType = ((VectorType *)value->getType())->getElementType();
+    return Builder->CreateGEP(vecType, value, 0, "ptr");
+  }
+}
+
+Value *getValueFromAllType(Value *value, AstType type) {
+  if (value->getType()->isPointerTy()) {
+    return Builder->CreateLoad(getTypeFromAstType(type), value, "tmp");
+  } else {
+    return value;
+  }
+}
+
+Type *getTypeFromAssignableValue(Value *value) {
+  if (value->getType()->isPointerTy()) {
+    return getTypeFromAstType(
+        currentScope->getIndentifier(((VariableExprAST *)value)->getName())
+            ->first);
+  } else if (value->getType()->isVectorTy()) {
+    // get ptr of the first element of the vector
+    Type *vecType = ((VectorType *)value->getType())->getElementType();
+    return vecType;
+  } else {
+    return value->getType();
+  }
+}
+
+Value *toDouble(Value *value) {
+  if (value->getType()->isDoubleTy())
+    return value;
+  else if (value->getType()->isFloatTy())
+    return Builder->CreateFPExt(value, Type::getDoubleTy(*TheContext), "tmp");
+  else if (value->getType()->isIntegerTy())
+    return Builder->CreateSIToFP(value, Type::getDoubleTy(*TheContext), "tmp");
+  else if (value->getType()->isVectorTy())
+    // change vector to double vector
+    return Builder->CreateFPExt(
+        value,
+        VectorType::get(Type::getDoubleTy(*TheContext),
+                        ((FixedVectorType *)value->getType())->getNumElements(),
+                        false),
+        "tmp");
+  //    return value;
+  else {
+    printf("Error: unknown type\n");
+    return nullptr;
+  }
+}
+
+Value *doubleTo(Type *type, Value *value) {
+  if (type->isDoubleTy())
+    return value;
+  else if (type->isFloatTy())
+    return Builder->CreateFPTrunc(value, Type::getFloatTy(*TheContext), "tmp");
+  else if (type->isIntegerTy())
+    return Builder->CreateFPToSI(value, Type::getInt32Ty(*TheContext), "tmp");
+  else if (type->isVectorTy())
+    return Builder->CreateFPTrunc(
+        value,
+        VectorType::get(Type::getFloatTy(*TheContext),
+                        ((FixedVectorType *)type)->getNumElements(), false),
+        "tmp");
+  else {
+    printf("Error: unknown type\n");
+    return nullptr;
+  }
+}
+
 bool isIncrementable(Type *type) {
-  if (type->isPointerTy())
+  if (type->isPointerTy() || type->isVectorTy())
     //  if (type->isIntegerTy() || type->isFloatingPointTy() ||
     //  type->isPointerTy() ||
     //      type->isDoubleTy())
@@ -116,17 +181,10 @@ Value *ConditionalExpressionAST::codegen() {
   if (!cond)
     return nullptr;
 
-  // Load int from pointer
-  if (cond->getType()->isPointerTy()) {
-    cond = Builder->CreateLoad(
-        getTypeFromAstType(
-            currentScope
-                ->getIndentifier(
-                    ((VariableExprAST *)condition.get())->getName())
-                ->first),
-        cond, "tmp");
-  }
+  cond = getValueFromAllType(cond, condition->getReturnType());
 
+  // change int 1 to int 32
+  cond = Builder->CreateSExt(cond, Type::getInt32Ty(*TheContext), "ifcond");
   cond = Builder->CreateICmpNE(
       cond, ConstantInt::get(Type::getInt32Ty(*TheContext), 0), "ifcond");
 
@@ -151,120 +209,101 @@ Value *BinaryExpressionAST::codegen() {
   Value *temp;
   Type *tempType;
   std::string tempName;
-  VariableExprAST * tempVar;
+  VariableExprAST *tempVar;
+  Type *rightType;
+  Type *leftType;
+  Value *leftDoubleTemp;
+  Value *rightDoubleTemp;
   switch (type) {
-  case plus_expr: //TOD: handle type conversion eg, int + float
+  case plus_expr: // TOD: handle type conversion eg, int + float
     left = LHS->codegen();
     right = RHS->codegen();
     if (!left || !right)
       return nullptr;
-    if (left->getType()->isPointerTy()) {
-      // get element from pointer
-      tempName = ((VariableExprAST *)LHS.get())->getName();
-      left = Builder->CreateLoad(
-          getTypeFromAstType(currentScope->getIndentifier(tempName)->first),
-          left, "tmp");
+    left = getValueFromAllType(left, LHS->getReturnType());
+    right = getValueFromAllType(right, RHS->getReturnType());
+    leftType = getTypeFromAstType(LHS->getReturnType());
+    left = toDouble(left);
+    right = toDouble(right);
+    if (!right->getType()->isVectorTy() && left->getType()->isVectorTy()) {
+      right = Builder->CreateVectorSplat(
+          ((FixedVectorType *)left->getType())->getNumElements(), right);
     }
-    if (right->getType()->isPointerTy()) {
-      tempName = ((VariableExprAST *)RHS.get())->getName();
-      right = Builder->CreateLoad(
-          getTypeFromAstType(currentScope->getIndentifier(tempName)->first),
-          right, "tmp");
-    }
-    return Builder->CreateAdd(left, right, "addtmp");
+    temp = Builder->CreateFAdd(left, right, "addtmp");
+    return doubleTo(leftType, temp);
   case minus_expr:
     left = LHS->codegen();
     right = RHS->codegen();
     if (!left || !right)
       return nullptr;
-    if (left->getType()->isPointerTy()) {
-      // get element from pointer
-      tempName = ((VariableExprAST *)LHS.get())->getName();
-      left = Builder->CreateLoad(
-          getTypeFromAstType(currentScope->getIndentifier(tempName)->first),
-          left, "tmp");
+    left = getValueFromAllType(left, LHS->getReturnType());
+    right = getValueFromAllType(right, RHS->getReturnType());
+    leftType = getTypeFromAstType(LHS->getReturnType());
+    left = toDouble(left);
+    right = toDouble(right);
+    if (!right->getType()->isVectorTy() && left->getType()->isVectorTy()) {
+      right = Builder->CreateVectorSplat(
+          ((FixedVectorType *)left->getType())->getNumElements(), right);
     }
-    if (right->getType()->isPointerTy()) {
-      tempName = ((VariableExprAST *)RHS.get())->getName();
-      right = Builder->CreateLoad(
-          getTypeFromAstType(currentScope->getIndentifier(tempName)->first),
-          right, "tmp");
-    }
-    return Builder->CreateSub(left, right, "subtmp");
+    temp = Builder->CreateFSub(left, right, "subtmp");
+    return doubleTo(leftType, temp);
   case times_expr:
     left = LHS->codegen();
     right = RHS->codegen();
     if (!left || !right)
       return nullptr;
-    if (left->getType()->isPointerTy()) {
-      // get element from pointer
-      tempName = ((VariableExprAST *)LHS.get())->getName();
-      left = Builder->CreateLoad(
-          getTypeFromAstType(currentScope->getIndentifier(tempName)->first),
-          left, "tmp");
+    left = getValueFromAllType(left, LHS->getReturnType());
+    right = getValueFromAllType(right, RHS->getReturnType());
+    leftType = getTypeFromAstType(LHS->getReturnType());
+    left = toDouble(left);
+    right = toDouble(right);
+    if (!right->getType()->isVectorTy() && left->getType()->isVectorTy()) {
+      right = Builder->CreateVectorSplat(
+          ((FixedVectorType *)left->getType())->getNumElements(), right);
     }
-    if (right->getType()->isPointerTy()) {
-      tempName = ((VariableExprAST *)RHS.get())->getName();
-      right = Builder->CreateLoad(
-          getTypeFromAstType(currentScope->getIndentifier(tempName)->first),
-          right, "tmp");
-    }
-    return Builder->CreateMul(left, right, "multmp");
+    temp = Builder->CreateFMul(left, right, "multmp");
+    return doubleTo(leftType, temp);
   case divide_expr:
     left = LHS->codegen();
     right = RHS->codegen();
     if (!left || !right)
       return nullptr;
-    if (left->getType()->isPointerTy()) {
-      // get element from pointer
-      tempName = ((VariableExprAST *)LHS.get())->getName();
-      left = Builder->CreateLoad(
-          getTypeFromAstType(currentScope->getIndentifier(tempName)->first),
-          left, "tmp");
+    left = getValueFromAllType(left, LHS->getReturnType());
+    right = getValueFromAllType(right, RHS->getReturnType());
+    leftType = getTypeFromAstType(LHS->getReturnType());
+    left = toDouble(left);
+    right = toDouble(right);
+    if (!right->getType()->isVectorTy() && left->getType()->isVectorTy()) {
+      right = Builder->CreateVectorSplat(
+          ((FixedVectorType *)left->getType())->getNumElements(), right);
     }
-    if (right->getType()->isPointerTy()) {
-      tempName = ((VariableExprAST *)RHS.get())->getName();
-      right = Builder->CreateLoad(
-          getTypeFromAstType(currentScope->getIndentifier(tempName)->first),
-          right, "tmp");
-    }
-    return Builder->CreateSDiv(left, right, "divtmp");
+    temp = Builder->CreateFDiv(left, right, "divtmp");
+    return doubleTo(leftType, temp);
   case mod_expr:
     left = LHS->codegen();
     right = RHS->codegen();
     if (!left || !right)
       return nullptr;
-    if (left->getType()->isPointerTy()) {
-      // get element from pointer
-      tempName = ((VariableExprAST *)LHS.get())->getName();
-      left = Builder->CreateLoad(
-          getTypeFromAstType(currentScope->getIndentifier(tempName)->first),
-          left, "tmp");
+    left = getValueFromAllType(left, LHS->getReturnType());
+    right = getValueFromAllType(right, RHS->getReturnType());
+    leftType = getTypeFromAstType(LHS->getReturnType());
+    rightType = getTypeFromAstType(RHS->getReturnType());
+    if (!leftType->isIntegerTy() || !rightType->isIntegerTy()) {
+      printf("Error: mod operator only works on integer\n");
+      return nullptr;
     }
-    if (right->getType()->isPointerTy()) {
-      tempName = ((VariableExprAST *)RHS.get())->getName();
-      right = Builder->CreateLoad(
-          getTypeFromAstType(currentScope->getIndentifier(tempName)->first),
-          right, "tmp");
-    }
-    return Builder->CreateSRem(left, right, "modtmp");
+    temp = Builder->CreateSRem(left, right, "modtmp");
+    return doubleTo(leftType, temp);
   case and_expr:
     left = LHS->codegen();
     right = RHS->codegen();
     if (!left || !right)
       return nullptr;
-    if (left->getType()->isPointerTy()) {
-      // get element from pointer
-      tempName = ((VariableExprAST *)LHS.get())->getName();
-      left = Builder->CreateLoad(
-          getTypeFromAstType(currentScope->getIndentifier(tempName)->first),
-          left, "tmp");
-    }
-    if (right->getType()->isPointerTy()) {
-      tempName = ((VariableExprAST *)RHS.get())->getName();
-      right = Builder->CreateLoad(
-          getTypeFromAstType(currentScope->getIndentifier(tempName)->first),
-          right, "tmp");
+    left = getValueFromAllType(left, LHS->getReturnType());
+    right = getValueFromAllType(right, RHS->getReturnType());
+    if (!left->getType()->isIntegerTy() || !right->getType()->isIntegerTy()) {
+      printf("Error: and operator only works on integer\n");
+      return nullptr;
     }
     zero = ConstantInt::get(Type::getInt32Ty(*TheContext), 0);
     is_left_zero = Builder->CreateICmpEQ(left, zero);
@@ -278,18 +317,11 @@ Value *BinaryExpressionAST::codegen() {
     right = RHS->codegen();
     if (!left || !right)
       return nullptr;
-    if (left->getType()->isPointerTy()) {
-      // get element from pointer
-      tempName = ((VariableExprAST *)LHS.get())->getName();
-      left = Builder->CreateLoad(
-          getTypeFromAstType(currentScope->getIndentifier(tempName)->first),
-          left, "tmp");
-    }
-    if (right->getType()->isPointerTy()) {
-      tempName = ((VariableExprAST *)RHS.get())->getName();
-      right = Builder->CreateLoad(
-          getTypeFromAstType(currentScope->getIndentifier(tempName)->first),
-          right, "tmp");
+    left = getValueFromAllType(left, LHS->getReturnType());
+    right = getValueFromAllType(right, RHS->getReturnType());
+    if (!left->getType()->isIntegerTy() || !right->getType()->isIntegerTy()) {
+      printf("Error: or operator only works on integer\n");
+      return nullptr;
     }
     zero = ConstantInt::get(Type::getInt32Ty(*TheContext), 0);
     is_left_zero = Builder->CreateICmpEQ(left, zero);
@@ -303,18 +335,11 @@ Value *BinaryExpressionAST::codegen() {
     right = RHS->codegen();
     if (!left || !right)
       return nullptr;
-    if (left->getType()->isPointerTy()) {
-      // get element from pointer
-      tempName = ((VariableExprAST *)LHS.get())->getName();
-      left = Builder->CreateLoad(
-          getTypeFromAstType(currentScope->getIndentifier(tempName)->first),
-          left, "tmp");
-    }
-    if (right->getType()->isPointerTy()) {
-      tempName = ((VariableExprAST *)RHS.get())->getName();
-      right = Builder->CreateLoad(
-          getTypeFromAstType(currentScope->getIndentifier(tempName)->first),
-          right, "tmp");
+    left = getValueFromAllType(left, LHS->getReturnType());
+    right = getValueFromAllType(right, RHS->getReturnType());
+    if (!left->getType()->isIntegerTy() || !right->getType()->isIntegerTy()) {
+      printf("Error: xor operator only works on integer\n");
+      return nullptr;
     }
     zero = ConstantInt::get(Type::getInt32Ty(*TheContext), 0);
     is_left_zero = Builder->CreateICmpEQ(left, zero);
@@ -331,18 +356,11 @@ Value *BinaryExpressionAST::codegen() {
     right = RHS->codegen();
     if (!left || !right)
       return nullptr;
-    if (left->getType()->isPointerTy()) {
-      // get element from pointer
-      tempName = ((VariableExprAST *)LHS.get())->getName();
-      left = Builder->CreateLoad(
-          getTypeFromAstType(currentScope->getIndentifier(tempName)->first),
-          left, "tmp");
-    }
-    if (right->getType()->isPointerTy()) {
-      tempName = ((VariableExprAST *)RHS.get())->getName();
-      right = Builder->CreateLoad(
-          getTypeFromAstType(currentScope->getIndentifier(tempName)->first),
-          right, "tmp");
+    left = getValueFromAllType(left, LHS->getReturnType());
+    right = getValueFromAllType(right, RHS->getReturnType());
+    if (!left->getType()->isIntegerTy() || !right->getType()->isIntegerTy()) {
+      printf("Error: bit_and operator only works on integer\n");
+      return nullptr;
     }
     return Builder->CreateAnd(left, right, "bandtmp");
   case bit_or_expr:
@@ -350,17 +368,11 @@ Value *BinaryExpressionAST::codegen() {
     right = RHS->codegen();
     if (!left || !right)
       return nullptr;
-    if (left->getType()->isPointerTy()) {
-      tempName = ((VariableExprAST *)LHS.get())->getName();
-      left = Builder->CreateLoad(
-          getTypeFromAstType(currentScope->getIndentifier(tempName)->first),
-          left, "tmp");
-    }
-    if (right->getType()->isPointerTy()) {
-      tempName = ((VariableExprAST *)RHS.get())->getName();
-      right = Builder->CreateLoad(
-          getTypeFromAstType(currentScope->getIndentifier(tempName)->first),
-          right, "tmp");
+    left = getValueFromAllType(left, LHS->getReturnType());
+    right = getValueFromAllType(right, RHS->getReturnType());
+    if (!left->getType()->isIntegerTy() || !right->getType()->isIntegerTy()) {
+      printf("Error: bit_or operator only works on integer\n");
+      return nullptr;
     }
     return Builder->CreateOr(left, right, "bortmp");
   case bit_xor_expr:
@@ -368,17 +380,11 @@ Value *BinaryExpressionAST::codegen() {
     right = RHS->codegen();
     if (!left || !right)
       return nullptr;
-    if (left->getType()->isPointerTy()) {
-      tempName = ((VariableExprAST *)LHS.get())->getName();
-      left = Builder->CreateLoad(
-          getTypeFromAstType(currentScope->getIndentifier(tempName)->first),
-          left, "tmp");
-    }
-    if (right->getType()->isPointerTy()) {
-      tempName = ((VariableExprAST *)RHS.get())->getName();
-      right = Builder->CreateLoad(
-          getTypeFromAstType(currentScope->getIndentifier(tempName)->first),
-          right, "tmp");
+    left = getValueFromAllType(left, LHS->getReturnType());
+    right = getValueFromAllType(right, RHS->getReturnType());
+    if (!left->getType()->isIntegerTy() || !right->getType()->isIntegerTy()) {
+      printf("Error: bit_xor operator only works on integer\n");
+      return nullptr;
     }
     return Builder->CreateXor(left, right, "bxortmp");
   case left_shift_expr:
@@ -386,17 +392,11 @@ Value *BinaryExpressionAST::codegen() {
     right = RHS->codegen();
     if (!left || !right)
       return nullptr;
-    if (left->getType()->isPointerTy()) {
-      tempName = ((VariableExprAST *)LHS.get())->getName();
-      left = Builder->CreateLoad(
-          getTypeFromAstType(currentScope->getIndentifier(tempName)->first),
-          left, "tmp");
-    }
-    if (right->getType()->isPointerTy()) {
-      tempName = ((VariableExprAST *)RHS.get())->getName();
-      right = Builder->CreateLoad(
-          getTypeFromAstType(currentScope->getIndentifier(tempName)->first),
-          right, "tmp");
+    left = getValueFromAllType(left, LHS->getReturnType());
+    right = getValueFromAllType(right, RHS->getReturnType());
+    if (!left->getType()->isIntegerTy() || !right->getType()->isIntegerTy()) {
+      printf("Error: left_shift operator only works on integer\n");
+      return nullptr;
     }
     return Builder->CreateShl(left, right, "lshifttmp");
   case right_shift_expr:
@@ -404,17 +404,11 @@ Value *BinaryExpressionAST::codegen() {
     right = RHS->codegen();
     if (!left || !right)
       return nullptr;
-    if (left->getType()->isPointerTy()) {
-      tempName = ((VariableExprAST *)LHS.get())->getName();
-      left = Builder->CreateLoad(
-          getTypeFromAstType(currentScope->getIndentifier(tempName)->first),
-          left, "tmp");
-    }
-    if (right->getType()->isPointerTy()) {
-      tempName = ((VariableExprAST *)RHS.get())->getName();
-      right = Builder->CreateLoad(
-          getTypeFromAstType(currentScope->getIndentifier(tempName)->first),
-          right, "tmp");
+    left = getValueFromAllType(left, LHS->getReturnType());
+    right = getValueFromAllType(right, RHS->getReturnType());
+    if (!left->getType()->isIntegerTy() || !right->getType()->isIntegerTy()) {
+      printf("Error: right_shift operator only works on integer\n");
+      return nullptr;
     }
     return Builder->CreateLShr(left, right, "rshifttmp");
   case less_expr:
@@ -422,150 +416,104 @@ Value *BinaryExpressionAST::codegen() {
     right = RHS->codegen();
     if (!left || !right)
       return nullptr;
-    if (left->getType()->isPointerTy()) {
-      tempName = ((VariableExprAST *)LHS.get())->getName();
-      left = Builder->CreateLoad(
-          getTypeFromAstType(currentScope->getIndentifier(tempName)->first),
-          left, "tmp");
-    }
-    if (right->getType()->isPointerTy()) {
-      tempName = ((VariableExprAST *)RHS.get())->getName();
-      right = Builder->CreateLoad(
-          getTypeFromAstType(currentScope->getIndentifier(tempName)->first),
-          right, "tmp");
-    }
-    return Builder->CreateICmpSLT(left, right, "lesstmp");
+    left = getValueFromAllType(left, LHS->getReturnType());
+    right = getValueFromAllType(right, RHS->getReturnType());
+    leftType = getTypeFromAstType(LHS->getReturnType());
+    left = toDouble(left);
+    right = toDouble(right);
+    temp = Builder->CreateFCmpULT(left, right, "lesstmp");
+    // return bool using i32
+    return temp;
   case greater_expr:
     left = LHS->codegen();
     right = RHS->codegen();
     if (!left || !right)
       return nullptr;
-    if (left->getType()->isPointerTy()) {
-      tempName = ((VariableExprAST *)LHS.get())->getName();
-      left = Builder->CreateLoad(
-          getTypeFromAstType(currentScope->getIndentifier(tempName)->first),
-          left, "tmp");
-    }
-    if (right->getType()->isPointerTy()) {
-      tempName = ((VariableExprAST *)RHS.get())->getName();
-      right = Builder->CreateLoad(
-          getTypeFromAstType(currentScope->getIndentifier(tempName)->first),
-          right, "tmp");
-    }
-    return Builder->CreateICmpSGT(left, right, "greatertmp");
+    left = getValueFromAllType(left, LHS->getReturnType());
+    right = getValueFromAllType(right, RHS->getReturnType());
+    leftType = getTypeFromAstType(LHS->getReturnType());
+    left = toDouble(left);
+    right = toDouble(right);
+    temp = Builder->CreateFCmpUGT(left, right, "greatertmp");
+    // change bool to 32 int
+    temp = Builder->CreateSExt(temp, Type::getInt32Ty(*TheContext), "ifcond");
+    return temp;
   case less_equal_expr:
     left = LHS->codegen();
     right = RHS->codegen();
     if (!left || !right)
       return nullptr;
-    if (left->getType()->isPointerTy()) {
-      tempName = ((VariableExprAST *)LHS.get())->getName();
-      left = Builder->CreateLoad(
-          getTypeFromAstType(currentScope->getIndentifier(tempName)->first),
-          left, "tmp");
-    }
-    if (right->getType()->isPointerTy()) {
-      tempName = ((VariableExprAST *)RHS.get())->getName();
-      right = Builder->CreateLoad(
-          getTypeFromAstType(currentScope->getIndentifier(tempName)->first),
-          right, "tmp");
-    }
-    return Builder->CreateICmpSLE(left, right, "lessequaltmp");
+    left = getValueFromAllType(left, LHS->getReturnType());
+    right = getValueFromAllType(right, RHS->getReturnType());
+    leftType = getTypeFromAstType(LHS->getReturnType());
+    left = toDouble(left);
+    right = toDouble(right);
+    temp = Builder->CreateFCmpULE(left, right, "lessequaltmp");
+    temp = Builder->CreateSExt(temp, Type::getInt32Ty(*TheContext), "ifcond");
+
+    return temp;
   case greater_equal_expr:
     left = LHS->codegen();
     right = RHS->codegen();
     if (!left || !right)
       return nullptr;
-    if (left->getType()->isPointerTy()) {
-      tempName = ((VariableExprAST *)LHS.get())->getName();
-      left = Builder->CreateLoad(
-          getTypeFromAstType(currentScope->getIndentifier(tempName)->first),
-          left, "tmp");
-    }
-    if (right->getType()->isPointerTy()) {
-      tempName = ((VariableExprAST *)RHS.get())->getName();
-      right = Builder->CreateLoad(
-          getTypeFromAstType(currentScope->getIndentifier(tempName)->first),
-          right, "tmp");
-    }
-    return Builder->CreateICmpSGE(left, right, "greaterequaltmp");
+    left = getValueFromAllType(left, LHS->getReturnType());
+    right = getValueFromAllType(right, RHS->getReturnType());
+    leftType = getTypeFromAstType(LHS->getReturnType());
+    left = toDouble(left);
+    right = toDouble(right);
+    temp = Builder->CreateFCmpUGE(left, right, "greaterequaltmp");
+    temp = Builder->CreateSExt(temp, Type::getInt32Ty(*TheContext), "ifcond");
+
+    return temp;
   case equal_expr:
     left = LHS->codegen();
     right = RHS->codegen();
     if (!left || !right)
       return nullptr;
-    if (left->getType()->isPointerTy()) {
-      tempName = ((VariableExprAST *)LHS.get())->getName();
-      left = Builder->CreateLoad(
-          getTypeFromAstType(currentScope->getIndentifier(tempName)->first),
-          left, "tmp");
-    }
-    if (right->getType()->isPointerTy()) {
-      tempName = ((VariableExprAST *)RHS.get())->getName();
-      right = Builder->CreateLoad(
-          getTypeFromAstType(currentScope->getIndentifier(tempName)->first),
-          right, "tmp");
-    }
-    return Builder->CreateICmpEQ(left, right, "equaltmp");
+    left = getValueFromAllType(left, LHS->getReturnType());
+    right = getValueFromAllType(right, RHS->getReturnType());
+    leftType = getTypeFromAstType(LHS->getReturnType());
+    left = toDouble(left);
+    right = toDouble(right);
+    temp = Builder->CreateFCmpUEQ(left, right, "equaltmp");
+    temp = Builder->CreateSExt(temp, Type::getInt32Ty(*TheContext), "ifcond");
+
+    return temp;
   case not_equal_expr:
     left = LHS->codegen();
     right = RHS->codegen();
     if (!left || !right)
       return nullptr;
-    if (left->getType()->isPointerTy()) {
-      tempName = ((VariableExprAST *)LHS.get())->getName();
-      left = Builder->CreateLoad(
-          getTypeFromAstType(currentScope->getIndentifier(tempName)->first),
-          left, "tmp");
-    }
-    if (right->getType()->isPointerTy()) {
-      tempName = ((VariableExprAST *)RHS.get())->getName();
-      right = Builder->CreateLoad(
-          getTypeFromAstType(currentScope->getIndentifier(tempName)->first),
-          right, "tmp");
-    }
-    return Builder->CreateICmpNE(left, right, "notequaltmp");
+    left = getValueFromAllType(left, LHS->getReturnType());
+    right = getValueFromAllType(right, RHS->getReturnType());
+    leftType = getTypeFromAstType(LHS->getReturnType());
+    left = toDouble(left);
+    right = toDouble(right);
+    temp = Builder->CreateFCmpUNE(left, right, "notequaltmp");
+    temp = Builder->CreateSExt(temp, Type::getInt32Ty(*TheContext), "ifcond");
+
+    return temp;
   case assign_expr:
     left = LHS->codegen();
-    if (!left)
+    right = RHS->codegen();
+    if (!left || !right)
       return nullptr;
     if (left->getType()->isPointerTy()) {
-      //      tempName = ((VariableExprAST *)LHS.get())->getName();
-      //      tempType =
-      //          getTypeFromAstType(currentScope->getIndentifier(tempName)->first);
-      right = RHS->codegen();
-      if (!right && RHS != nullptr) { // TypeConstructor
-        std::unique_ptr<TypeConstructorAST> typeConstructor =
-            std::unique_ptr<TypeConstructorAST>(
-                (TypeConstructorAST *)RHS.release());
-        auto &exprList = typeConstructor->getArgs();
-        for (int i = 0; i < exprList->getExpressions().size(); i++) {
-          auto &expr = exprList->getExpressions()[i];
-          auto currentIndex = ConstantInt::get(*TheContext, APInt(32, i, true));
-          auto elementPtr = Builder->CreateGEP(Type::getFloatTy(*TheContext),
-                                               left, currentIndex);
-          Value *value = expr->codegen();
-          // change double or int to float
-          if (value->getType()->isDoubleTy()) {
-            value =
-                Builder->CreateFPTrunc(value, Type::getFloatTy(*TheContext));
-          } else if (value->getType()->isIntegerTy()) {
-            value = ConstantExpr::getSIToFP((ConstantInt *)value,
-                                            Type::getFloatTy(*TheContext));
-          }
-          Builder->CreateStore(value, elementPtr);
-        }
-        return left;
-      } else if (!right) {
-        return nullptr;
+      right = getValueFromAllType(right, RHS->getReturnType());
+      left = getPtrFromPtrOrVector(left);
+      leftType = getTypeFromAstType(LHS->getReturnType());
+      if (leftType->isVectorTy()) {
+        // store to the vector
+        Builder->CreateStore(right, left);
+        return Builder->CreateLoad(leftType, left);
+      } else {
+        rightDoubleTemp = toDouble(right);
+        temp = doubleTo(leftType, rightDoubleTemp);
+        // store to the pointer
+        Builder->CreateStore(temp, left);
+        return temp;
       }
-      if (right->getType()->isPointerTy()) {
-        tempName = ((VariableExprAST *)RHS.get())->getName();
-        right = Builder->CreateLoad(
-            getTypeFromAstType(currentScope->getIndentifier(tempName)->first),
-            right, "tmp");
-      }
-      return Builder->CreateStore(right, left);
     } else {
       printf("Error: left side of assignment is not a pointer\n");
       return nullptr;
@@ -575,216 +523,307 @@ Value *BinaryExpressionAST::codegen() {
     right = RHS->codegen();
     if (!left || !right)
       return nullptr;
-    tempType = right->getType();
-    if (right->getType()->isPointerTy()) {
-      tempName = ((VariableExprAST *)RHS.get())->getName();
-      tempType =
-          getTypeFromAstType(currentScope->getIndentifier(tempName)->first);
-      right = Builder->CreateLoad(
-          getTypeFromAstType(currentScope->getIndentifier(tempName)->first),
-          right, "tmp");
+    if (left->getType()->isPointerTy()) {
+      right = getValueFromAllType(right, RHS->getReturnType());
+      left = getPtrFromPtrOrVector(left);
+      leftType = getTypeFromAstType(LHS->getReturnType());
+      if (leftType->isVectorTy()) {
+        // store to the vector
+        temp = Builder->CreateLoad(leftType, left);
+        temp = Builder->CreateFAdd(temp, right, "addtmp");
+        Builder->CreateStore(temp, left);
+        return temp;
+      } else {
+        rightDoubleTemp = toDouble(right);
+        temp = Builder->CreateLoad(leftType, left);
+        temp = toDouble(temp);
+        temp = Builder->CreateFAdd(temp, rightDoubleTemp, "addtmp");
+        temp = doubleTo(leftType, temp);
+        // store to the pointer
+        Builder->CreateStore(temp, left);
+        return temp;
+      }
+    } else {
+      printf("Error: left side of assignment is not a pointer\n");
+      return nullptr;
     }
-    temp = Builder->CreateAdd(Builder->CreateLoad(tempType, left), right);
-    Builder->CreateStore(temp, left);
-    return temp;
+    //    left = LHS->codegen();
+    //    right = RHS->codegen();
+    //    if (!left || !right)
+    //      return nullptr;
+    //    tempType = right->getType();
+    //    if (right->getType()->isPointerTy()) {
+    //      tempName = ((VariableExprAST *)RHS.get())->getName();
+    //      tempType =
+    //          getTypeFromAstType(currentScope->getIndentifier(tempName)->first);
+    //      right = Builder->CreateLoad(
+    //          getTypeFromAstType(currentScope->getIndentifier(tempName)->first),
+    //          right, "tmp");
+    //    }
+    //    temp = Builder->CreateAdd(Builder->CreateLoad(tempType, left), right);
+    //    Builder->CreateStore(temp, left);
+    //    return temp;
   case minus_assign_expr:
     left = LHS->codegen();
     right = RHS->codegen();
     if (!left || !right)
       return nullptr;
-    tempType = right->getType();
-    if (right->getType()->isPointerTy()) {
-      tempName = ((VariableExprAST *)RHS.get())->getName();
-      tempType =
-          getTypeFromAstType(currentScope->getIndentifier(tempName)->first);
-      right = Builder->CreateLoad(
-          getTypeFromAstType(currentScope->getIndentifier(tempName)->first),
-          right, "tmp");
+    if (left->getType()->isPointerTy()) {
+      right = getValueFromAllType(right, RHS->getReturnType());
+      left = getPtrFromPtrOrVector(left);
+      leftType = getTypeFromAstType(LHS->getReturnType());
+      if (leftType->isVectorTy()) {
+        // store to the vector
+        temp = Builder->CreateLoad(leftType, left);
+        temp = Builder->CreateFSub(temp, right, "subtmp");
+        Builder->CreateStore(temp, left);
+        return temp;
+      } else {
+        rightDoubleTemp = toDouble(right);
+        temp = Builder->CreateLoad(leftType, left);
+        temp = toDouble(temp);
+        temp = Builder->CreateFSub(temp, rightDoubleTemp, "subtmp");
+        temp = doubleTo(leftType, temp);
+        // store to the pointer
+        Builder->CreateStore(temp, left);
+        return temp;
+      }
+    } else {
+      printf("Error: left side of assignment is not a pointer\n");
+      return nullptr;
     }
-    temp = Builder->CreateSub(Builder->CreateLoad(tempType, left), right);
-    Builder->CreateStore(temp, left);
-    return temp;
   case times_assign_expr:
     left = LHS->codegen();
     right = RHS->codegen();
     if (!left || !right)
       return nullptr;
-    tempType = right->getType();
-    if (right->getType()->isPointerTy()) {
-      tempName = ((VariableExprAST *)RHS.get())->getName();
-      tempType =
-          getTypeFromAstType(currentScope->getIndentifier(tempName)->first);
-      right = Builder->CreateLoad(
-          getTypeFromAstType(currentScope->getIndentifier(tempName)->first),
-          right, "tmp");
+    if (left->getType()->isPointerTy()) {
+      right = getValueFromAllType(right, RHS->getReturnType());
+      left = getPtrFromPtrOrVector(left);
+      leftType = getTypeFromAstType(LHS->getReturnType());
+      if (leftType->isVectorTy()) {
+        // store to the vector
+        temp = Builder->CreateLoad(leftType, left);
+        temp = Builder->CreateFMul(temp, right, "multmp");
+        Builder->CreateStore(temp, left);
+        return temp;
+      } else {
+        rightDoubleTemp = toDouble(right);
+        temp = Builder->CreateLoad(leftType, left);
+        temp = toDouble(temp);
+        temp = Builder->CreateFMul(temp, rightDoubleTemp, "multmp");
+        temp = doubleTo(leftType, temp);
+        // store to the pointer
+        Builder->CreateStore(temp, left);
+        return temp;
+      }
+    } else {
+      printf("Error: left side of assignment is not a pointer\n");
+      return nullptr;
     }
-    temp = Builder->CreateMul(Builder->CreateLoad(tempType, left), right);
-    Builder->CreateStore(temp, left);
-    return temp;
   case divide_assign_expr:
     left = LHS->codegen();
     right = RHS->codegen();
     if (!left || !right)
       return nullptr;
-    tempType = right->getType();
-    if (right->getType()->isPointerTy()) {
-      tempName = ((VariableExprAST *)RHS.get())->getName();
-      tempType =
-          getTypeFromAstType(currentScope->getIndentifier(tempName)->first);
-      right = Builder->CreateLoad(
-          getTypeFromAstType(currentScope->getIndentifier(tempName)->first),
-          right, "tmp");
+    if (left->getType()->isPointerTy()) {
+      right = getValueFromAllType(right, RHS->getReturnType());
+      left = getPtrFromPtrOrVector(left);
+      leftType = getTypeFromAstType(LHS->getReturnType());
+      if (leftType->isVectorTy()) {
+        // store to the vector
+        temp = Builder->CreateLoad(leftType, left);
+        temp = Builder->CreateFDiv(temp, right, "divtmp");
+        Builder->CreateStore(temp, left);
+        return temp;
+      } else {
+        rightDoubleTemp = toDouble(right);
+        temp = Builder->CreateLoad(leftType, left);
+        temp = toDouble(temp);
+        temp = Builder->CreateFDiv(temp, rightDoubleTemp, "divtmp");
+        temp = doubleTo(leftType, temp);
+        // store to the pointer
+        Builder->CreateStore(temp, left);
+        return temp;
+      }
+    } else {
+      printf("Error: left side of assignment is not a pointer\n");
+      return nullptr;
     }
-    temp = Builder->CreateSDiv(Builder->CreateLoad(tempType, left), right);
-    Builder->CreateStore(temp, left);
-    return temp;
   case mod_assign_expr:
     left = LHS->codegen();
     right = RHS->codegen();
     if (!left || !right)
       return nullptr;
-    tempType = right->getType();
-    if (right->getType()->isPointerTy()) {
-      tempName = ((VariableExprAST *)RHS.get())->getName();
-      tempType =
-          getTypeFromAstType(currentScope->getIndentifier(tempName)->first);
-      right = Builder->CreateLoad(
-          getTypeFromAstType(currentScope->getIndentifier(tempName)->first),
-          right, "tmp");
+    if (left->getType()->isPointerTy()) {
+      right = getValueFromAllType(right, RHS->getReturnType());
+      left = getPtrFromPtrOrVector(left);
+      leftType = getTypeFromAstType(LHS->getReturnType());
+      if (leftType->isVectorTy()) {
+        // store to the vector
+        temp = Builder->CreateLoad(leftType, left);
+        temp = Builder->CreateFRem(temp, right, "modtmp");
+        Builder->CreateStore(temp, left);
+        return temp;
+      } else {
+        rightDoubleTemp = toDouble(right);
+        temp = Builder->CreateLoad(leftType, left);
+        temp = toDouble(temp);
+        temp = Builder->CreateFRem(temp, rightDoubleTemp, "modtmp");
+        temp = doubleTo(leftType, temp);
+        // store to the pointer
+        Builder->CreateStore(temp, left);
+        return temp;
+      }
+    } else {
+      printf("Error: left side of assignment is not a pointer\n");
+      return nullptr;
     }
-    temp = Builder->CreateSRem(Builder->CreateLoad(tempType, left), right);
-    Builder->CreateStore(temp, left);
-    return temp;
   case bit_and_assign_expr:
     left = LHS->codegen();
     right = RHS->codegen();
     if (!left || !right)
       return nullptr;
-    tempType = right->getType();
-    if (right->getType()->isPointerTy()) {
-      tempName = ((VariableExprAST *)RHS.get())->getName();
-      tempType =
-          getTypeFromAstType(currentScope->getIndentifier(tempName)->first);
-      right = Builder->CreateLoad(
-          getTypeFromAstType(currentScope->getIndentifier(tempName)->first),
-          right, "tmp");
+    if (left->getType()->isPointerTy() || left->getType()->isVectorTy()) {
+      rightType = getTypeFromAssignableValue(right);
+      right = getValueFromAllType(right, RHS->getReturnType());
+      left = getPtrFromPtrOrVector(left);
+      leftType = left->getType();
+      // load int from left pointer
+      if (!rightType->isIntegerTy() || !leftType->isIntegerTy()) {
+        printf("Error: don't support bit and assign for non-integer type\n");
+      }
+      temp = Builder->CreateLoad(leftType, left);
+      temp = Builder->CreateAnd(temp, right);
+      // store to the pointer
+      Builder->CreateStore(temp, left);
+      return temp;
+    } else {
+      printf("Error: left side of assignment is not a pointer\n");
+      return nullptr;
     }
-    temp = Builder->CreateAnd(Builder->CreateLoad(tempType, left), right);
-    Builder->CreateStore(temp, left);
-    return temp;
   case bit_or_assign_expr:
     left = LHS->codegen();
     right = RHS->codegen();
     if (!left || !right)
       return nullptr;
-    tempType = right->getType();
-    if (right->getType()->isPointerTy()) {
-      tempName = ((VariableExprAST *)RHS.get())->getName();
-      tempType =
-          getTypeFromAstType(currentScope->getIndentifier(tempName)->first);
-      right = Builder->CreateLoad(
-          getTypeFromAstType(currentScope->getIndentifier(tempName)->first),
-          right, "tmp");
+    if (left->getType()->isPointerTy() || left->getType()->isVectorTy()) {
+      rightType = getTypeFromAssignableValue(right);
+      right = getValueFromAllType(right, RHS->getReturnType());
+      left = getPtrFromPtrOrVector(left);
+      leftType = left->getType();
+      // load int from left pointer
+      if (!rightType->isIntegerTy() || !leftType->isIntegerTy()) {
+        printf("Error: don't support bit or assign for non-integer type\n");
+      }
+      temp = Builder->CreateLoad(leftType, left);
+      temp = Builder->CreateOr(temp, right);
+      // store to the pointer
+      Builder->CreateStore(temp, left);
+      return temp;
+    } else {
+      printf("Error: left side of assignment is not a pointer\n");
+      return nullptr;
     }
-    temp = Builder->CreateOr(Builder->CreateLoad(tempType, left), right);
-    Builder->CreateStore(temp, left);
-    return temp;
   case left_shift_assign_expr:
     left = LHS->codegen();
     right = RHS->codegen();
     if (!left || !right)
       return nullptr;
-    tempType = right->getType();
-    if (right->getType()->isPointerTy()) {
-      tempName = ((VariableExprAST *)RHS.get())->getName();
-      tempType =
-          getTypeFromAstType(currentScope->getIndentifier(tempName)->first);
-      right = Builder->CreateLoad(
-          getTypeFromAstType(currentScope->getIndentifier(tempName)->first),
-          right, "tmp");
+    if (left->getType()->isPointerTy()) {
+      right = getValueFromAllType(right, RHS->getReturnType());
+      left = getPtrFromPtrOrVector(left);
+      leftType = getTypeFromAstType(LHS->getReturnType());
+      if (!getTypeFromAstType(LHS->getReturnType())->isIntegerTy() ||
+          !right->getType()->isIntegerTy()) {
+        printf("Error: don't support left shift assign for non-integer type\n");
+      }
+      temp = Builder->CreateLoad(leftType, left);
+      temp = Builder->CreateShl(temp, right);
+      // store to the pointer
+      Builder->CreateStore(temp, left);
+      return temp;
+    } else {
+      printf("Error: left side of assignment is not a pointer\n");
+      return nullptr;
     }
-    temp = Builder->CreateShl(Builder->CreateLoad(tempType, left), right);
-    Builder->CreateStore(temp, left);
-    return temp;
   case right_shift_assign_expr:
     left = LHS->codegen();
     right = RHS->codegen();
     if (!left || !right)
       return nullptr;
-    tempType = right->getType();
-    if (right->getType()->isPointerTy()) {
-      tempName = ((VariableExprAST *)RHS.get())->getName();
-      tempType =
-          getTypeFromAstType(currentScope->getIndentifier(tempName)->first);
-      right = Builder->CreateLoad(
-          getTypeFromAstType(currentScope->getIndentifier(tempName)->first),
-          right, "tmp");
+    if (left->getType()->isPointerTy()) {
+      right = getValueFromAllType(right, RHS->getReturnType());
+      left = getPtrFromPtrOrVector(left);
+      leftType = getTypeFromAstType(LHS->getReturnType());
+      if (!getTypeFromAstType(LHS->getReturnType())->isIntegerTy() ||
+          !right->getType()->isIntegerTy()) {
+        printf(
+            "Error: don't support right shift assign for non-integer type\n");
+      }
+      temp = Builder->CreateLoad(leftType, left);
+      temp = Builder->CreateAShr(temp, right);
+      // store to the pointer
+      Builder->CreateStore(temp, left);
+      return temp;
+    } else {
+      printf("Error: left side of assignment is not a pointer\n");
+      return nullptr;
     }
-    temp = Builder->CreateLShr(Builder->CreateLoad(tempType, left), right);
-    Builder->CreateStore(temp, left);
-    return temp;
   case or_assign_expr:
     left = LHS->codegen();
     right = RHS->codegen();
     if (!left || !right)
       return nullptr;
-    tempType = right->getType();
-    if (right->getType()->isPointerTy()) {
-      tempName = ((VariableExprAST *)RHS.get())->getName();
-      tempType =
-          getTypeFromAstType(currentScope->getIndentifier(tempName)->first);
-      right = Builder->CreateLoad(
-          getTypeFromAstType(currentScope->getIndentifier(tempName)->first),
-          right, "tmp");
-    }
-    temp = left;
     if (left->getType()->isPointerTy()) {
-      tempName = ((VariableExprAST *)LHS.get())->getName();
-      tempType =
-          getTypeFromAstType(currentScope->getIndentifier(tempName)->first);
-      temp = Builder->CreateLoad(
-          getTypeFromAstType(currentScope->getIndentifier(tempName)->first),
-          left, "tmp");
+      rightType = getTypeFromAstType(RHS->getReturnType());
+      right = getValueFromAllType(right, RHS->getReturnType());
+      left = getPtrFromPtrOrVector(left);
+      leftType = getTypeFromAstType(LHS->getReturnType());
+      // load int from left pointer
+      if (!rightType->isIntegerTy() || !leftType->isIntegerTy()) {
+        printf("Error: don't support or assign for non-integer type\n");
+      }
+      zero = ConstantInt::get(Type::getInt32Ty(*TheContext), 0);
+      temp = Builder->CreateLoad(leftType, left);
+      is_left_zero = Builder->CreateICmpEQ(temp, zero);
+      is_right_zero = Builder->CreateICmpEQ(right, zero);
+      cond = Builder->CreateOr(is_left_zero, is_right_zero, "ortmp");
+      temp = Builder->CreateSelect(
+          cond, zero, ConstantInt::get(Type::getInt32Ty(*TheContext), 1));
+      Builder->CreateStore(temp, left);
+      return temp;
+    } else {
+      printf("Error: left side of assignment is not a pointer\n");
+      return nullptr;
     }
-    zero = ConstantInt::get(Type::getInt32Ty(*TheContext), 0);
-    is_left_zero = Builder->CreateICmpEQ(temp, zero);
-    is_right_zero = Builder->CreateICmpEQ(right, zero);
-    cond = Builder->CreateOr(is_left_zero, is_right_zero, "ortmp");
-    temp = Builder->CreateSelect(
-        cond, zero, ConstantInt::get(Type::getInt32Ty(*TheContext), 1));
-    Builder->CreateStore(temp, left);
-    return temp;
   case and_assign_expr:
     left = LHS->codegen();
     right = RHS->codegen();
     if (!left || !right)
       return nullptr;
-    tempType = right->getType();
-    if (right->getType()->isPointerTy()) {
-      tempName = ((VariableExprAST *)RHS.get())->getName();
-      tempType =
-          getTypeFromAstType(currentScope->getIndentifier(tempName)->first);
-      right = Builder->CreateLoad(
-          getTypeFromAstType(currentScope->getIndentifier(tempName)->first),
-          right, "tmp");
+    if (left->getType()->isPointerTy() || left->getType()->isVectorTy()) {
+      rightType = getTypeFromAstType(RHS->getReturnType());
+      right = getValueFromAllType(right, RHS->getReturnType());
+      left = getPtrFromPtrOrVector(left);
+      leftType = getTypeFromAstType(LHS->getReturnType());
+      // load int from left pointer
+      if (!rightType->isIntegerTy() || !leftType->isIntegerTy()) {
+        printf("Error: don't support and assign for non-integer type\n");
+      }
+      zero = ConstantInt::get(Type::getInt32Ty(*TheContext), 0);
+      temp = Builder->CreateLoad(leftType, left);
+      is_left_zero = Builder->CreateICmpEQ(temp, zero);
+      is_right_zero = Builder->CreateICmpEQ(right, zero);
+      cond = Builder->CreateAnd(is_left_zero, is_right_zero, "andtmp");
+      temp = Builder->CreateSelect(
+          cond, zero, ConstantInt::get(Type::getInt32Ty(*TheContext), 1));
+      Builder->CreateStore(temp, left);
+      return temp;
+    } else {
+      printf("Error: left side of assignment is not a pointer\n");
+      return nullptr;
     }
-    temp = left;
-    if (left->getType()->isPointerTy()) {
-      tempName = ((VariableExprAST *)LHS.get())->getName();
-      tempType =
-          getTypeFromAstType(currentScope->getIndentifier(tempName)->first);
-      temp = Builder->CreateLoad(
-          getTypeFromAstType(currentScope->getIndentifier(tempName)->first),
-          left, "tmp");
-    }
-    zero = ConstantInt::get(Type::getInt32Ty(*TheContext), 0);
-    is_left_zero = Builder->CreateICmpEQ(temp, zero);
-    is_right_zero = Builder->CreateICmpEQ(right, zero);
-    cond = Builder->CreateAnd(is_left_zero, is_right_zero, "andtmp");
-    temp = Builder->CreateSelect(
-        cond, zero, ConstantInt::get(Type::getInt32Ty(*TheContext), 1));
-    Builder->CreateStore(temp, left);
-    return temp;
   case sequence_expr:
     LHS->codegen();
     return RHS->codegen();
@@ -804,6 +843,10 @@ Value *PrefixExpressionAST::codegen() { // TODO: 06.21 finish this and after
   Value *cond;
   std::string tempName;
   Value *temp;
+  Value *left;
+  Value *right;
+  Type *leftType;
+  Type *rightType;
   switch (type) {
   case plus_p_expr: // TODO: check the RHS can be assigned, eg, ++vec2.x
     var = RHS->codegen();
@@ -811,15 +854,17 @@ Value *PrefixExpressionAST::codegen() { // TODO: 06.21 finish this and after
     // check
     if (isIncrementable(varType)) {
       // get element from pointer
-      tempName = ((VariableExprAST *)RHS.get())->getName();
-      oldValue = Builder->CreateLoad(
-          getTypeFromAstType(currentScope->getIndentifier(tempName)->first),
-          var, "tmp");
-      newValue = Builder->CreateAdd(
-          oldValue, ConstantInt::get(llvm::Type::getInt32Ty(*TheContext), 1),
-          "newvalue");
-      Builder->CreateStore(newValue, var);
-      return newValue;
+      right = getValueFromAllType(var, RHS->getReturnType());
+      rightType = getTypeFromAstType(RHS->getReturnType());
+      // load int from left pointer
+      if (!rightType->isIntegerTy()) {
+        printf("Error: don't support plus plus for non-integer type\n");
+      }
+      temp = Builder->CreateAdd(
+          right, ConstantInt::get(llvm::Type::getInt32Ty(*TheContext), 1));
+      // store to the pointer
+      Builder->CreateStore(temp, getPtrFromPtrOrVector(var));
+      return temp;
     } else {
       printf("Error: cannot increment this type\n");
       return nullptr;
@@ -829,60 +874,50 @@ Value *PrefixExpressionAST::codegen() { // TODO: 06.21 finish this and after
     varType = var->getType();
     // check
     if (isIncrementable(varType)) {
-      tempName = ((VariableExprAST *)RHS.get())->getName();
-      oldValue = Builder->CreateLoad(
-          getTypeFromAstType(currentScope->getIndentifier(tempName)->first),
-          var, "tmp");
-      newValue = Builder->CreateSub(
-          oldValue, ConstantInt::get(llvm::Type::getInt32Ty(*TheContext), 1),
-          "newvalue");
-      Builder->CreateStore(newValue, var);
-      return newValue;
+      // get element from pointer
+      right = getValueFromAllType(var, RHS->getReturnType());
+      rightType = getTypeFromAstType(RHS->getReturnType());
+      // load int from left pointer
+      if (!rightType->isIntegerTy()) {
+        printf("Error: don't support plus plus for non-integer type\n");
+      }
+      temp = Builder->CreateSub(
+          right, ConstantInt::get(llvm::Type::getInt32Ty(*TheContext), 1));
+      // store to the pointer
+      Builder->CreateStore(temp, getPtrFromPtrOrVector(var));
+      return temp;
     } else {
-      printf("Error: cannot decrement this type\n");
+      printf("Error: cannot increment this type\n");
       return nullptr;
     }
   case minus_expr:
     temp = RHS->codegen();
     if (!temp)
       return nullptr;
-    if (temp->getType()->isPointerTy()) {
-      tempName = ((VariableExprAST *)RHS.get())->getName();
-      var = Builder->CreateLoad(
-          getTypeFromAstType(currentScope->getIndentifier(tempName)->first),
-          temp, "tmp");
-    } else {
-      var = temp;
+    if (isIncrementable(temp->getType())) {
+      temp = getValueFromAllType(temp, RHS->getReturnType());
     }
-    return Builder->CreateNeg(var, "neg");
+    right = toDouble(temp);
+    temp = Builder->CreateNeg(right, "negtmp");
+    temp = doubleTo(getTypeFromAstType(RHS->getReturnType()), temp);
+    return temp;
   case plus_expr:
     temp = RHS->codegen();
     if (!temp)
       return nullptr;
-    if (temp->getType()->isPointerTy()) {
-      tempName = ((VariableExprAST *)RHS.get())->getName();
-      var = Builder->CreateLoad(
-          getTypeFromAstType(currentScope->getIndentifier(tempName)->first),
-          temp, "tmp");
-    } else {
-      var = temp;
+    if (isIncrementable(temp->getType())) {
+      temp = getValueFromAllType(temp, RHS->getReturnType());
     }
-    ConstantVector
-    return var;
+    return temp;
   case not_expr: // !, logical not
     zero = ConstantInt::get(Type::getInt32Ty(*TheContext), 0);
     temp = RHS->codegen();
     if (!temp)
       return nullptr;
-    if (temp->getType()->isPointerTy()) {
-      tempName = ((VariableExprAST *)RHS.get())->getName();
-      var = Builder->CreateLoad(
-          getTypeFromAstType(currentScope->getIndentifier(tempName)->first),
-          temp, "tmp");
-    } else {
-      var = temp;
+    if (isIncrementable(temp->getType())) {
+      temp = getValueFromAllType(temp, RHS->getReturnType());
     }
-    cond = Builder->CreateICmpEQ(var, zero, "ifcond");
+    cond = Builder->CreateICmpEQ(temp, zero, "ifcond");
     return Builder->CreateSelect(
         cond, zero, ConstantInt::get(Type::getInt32Ty(*TheContext), 1),
         "selecttmp");
@@ -890,15 +925,10 @@ Value *PrefixExpressionAST::codegen() { // TODO: 06.21 finish this and after
     temp = RHS->codegen();
     if (!temp)
       return nullptr;
-    if (temp->getType()->isPointerTy()) {
-      tempName = ((VariableExprAST *)RHS.get())->getName();
-      var = Builder->CreateLoad(
-          getTypeFromAstType(currentScope->getIndentifier(tempName)->first),
-          temp, "tmp");
-    } else {
-      var = temp;
+    if (isIncrementable(temp->getType())) {
+      temp = getValueFromAllType(temp, RHS->getReturnType());
     }
-    return Builder->CreateNot(var, "not");
+    return Builder->CreateNot(temp, "nottmp");
   default:
     printf("Error: unknown prefix expression\n");
     return nullptr;
@@ -907,25 +937,24 @@ Value *PrefixExpressionAST::codegen() { // TODO: 06.21 finish this and after
 
 Value *PostfixExpressionAST::codegen() {
   Value *var;
+  AllocaInst *left;
   Value *oldValue;
   Value *newValue;
   Value *temp;
   std::string varName;
   VariableExprAST *varExpr;
+  Type *varType;
   int index = -1;
   switch (type) {
   case plus_p_expr: // TODO: check the RHS can be assigned, eg, ++vec2.x | also
     temp = LHS->codegen();
     if (isIncrementable(temp->getType())) {
-      varName = ((VariableExprAST *)LHS.get())->getName();
-      oldValue = Builder->CreateLoad(
-          getTypeFromAstType(currentScope->getIndentifier(varName)->first),
-          temp, "oldvalue");
+      var = getValueFromAllType(temp, LHS->getReturnType());
       newValue = Builder->CreateAdd(
-          oldValue, ConstantInt::get(llvm::Type::getInt32Ty(*TheContext), 1),
+          var, ConstantInt::get(llvm::Type::getInt32Ty(*TheContext), 1),
           "newvalue");
-      Builder->CreateStore(newValue, temp);
-      return oldValue;
+      Builder->CreateStore(newValue, getPtrFromPtrOrVector(temp));
+      return var;
     } else {
       printf("Error: cannot decrement this type\n");
       return nullptr;
@@ -933,15 +962,12 @@ Value *PostfixExpressionAST::codegen() {
   case minus_m_expr:
     temp = LHS->codegen();
     if (isIncrementable(temp->getType())) {
-      varName = ((VariableExprAST *)LHS.get())->getName();
-      oldValue = Builder->CreateLoad(
-          getTypeFromAstType(currentScope->getIndentifier(varName)->first),
-          temp, "oldvalue");
+      var = getValueFromAllType(temp, LHS->getReturnType());
       newValue = Builder->CreateSub(
-          oldValue, ConstantInt::get(llvm::Type::getInt32Ty(*TheContext), 1),
+          var, ConstantInt::get(llvm::Type::getInt32Ty(*TheContext), 1),
           "newvalue");
-      Builder->CreateStore(newValue, temp);
-      return oldValue;
+      Builder->CreateStore(newValue, getPtrFromPtrOrVector(temp));
+      return var;
     } else {
       printf("Error: cannot decrement this type\n");
       return nullptr;
@@ -965,14 +991,24 @@ Value *PostfixExpressionAST::codegen() {
       printf("Error: unknown identifier\n");
       return nullptr;
     }
-    var = currentScope->getIndentifier(varName)->second;
-    // create Vector type
-    oldValue = Builder->CreateLoad(
-        getTypeFromAstType(currentScope->getIndentifier(varName)->first), var,
-        "oldvalue");
-    // using index to get the value
-    newValue = Builder->CreateExtractElement(oldValue, index, "newvalue");
-    return newValue;
+    var = LHS->codegen();
+    varType = getTypeFromAstType(LHS->getReturnType());
+    // return the pointer to the element
+    if (varType->isVectorTy() || varType->isPointerTy()) {
+      temp = ConstantInt::get(Type::getInt32Ty(*TheContext), index);
+      std::vector<Value *> indices;
+      // sub one from index
+      indices.push_back(ConstantInt::get(Type::getInt32Ty(*TheContext), 0));
+      indices.push_back(temp);
+      // create one element vector using indices
+      temp = Builder->CreateGEP(
+          VectorType::get(Type::getFloatTy(*TheContext), 1, false), var,
+          indices); // TODO: dont know how to use GEP
+      return temp;
+    } else {
+      printf("Error: cannot extract element from this type\n");
+      return nullptr;
+    }
   default:
     printf("Error: unknown type\n");
     break;
@@ -998,7 +1034,15 @@ Value *SequenceExpressionAST::codegen() {
   for (int i = 0; i < expressions.size() - 1; i++) {
     expressions[i]->codegen();
   }
-  return expressions[expressions.size() - 1]->codegen();
+  Value *last = expressions[expressions.size() - 1]->codegen();
+  if (last->getType()->isPointerTy()) {
+    return Builder->CreateLoad(
+        getTypeFromAstType(
+            expressions[expressions.size() - 1]->getReturnType()),
+        last);
+  } else {
+    return last;
+  }
 }
 
 Value *SequenceExpressionAST::getArgs() {
@@ -1090,10 +1134,11 @@ Value *SentencesAST::codegen() {
   } else {
     currentScope = topScope;
   }
-  if (lastValue == nullptr) {
-    Builder->CreateRetVoid();
-  }
-  return lastValue;
+  //  if (lastValue == nullptr) {
+  //    Builder->CreateRetVoid();
+  //  }
+  // return zero
+  return ConstantFP::get(*TheContext, APFloat(0.0));
 }
 
 Value *IfStatementAST::codegen() {
@@ -1101,8 +1146,15 @@ Value *IfStatementAST::codegen() {
   if (!condValue)
     return nullptr;
   // int to float
+  if (condValue->getType()->isPointerTy()) {
+    condValue = Builder->CreateLoad(
+        getTypeFromAstType(condition->getReturnType()), condValue);
+  }
   if (condValue->getType()->isIntegerTy()) {
     condValue = Builder->CreateSIToFP(condValue, Type::getDoubleTy(*TheContext),
+                                      "intcast");
+  } else if (condValue->getType()->isFloatingPointTy()) {
+    condValue = Builder->CreateFPCast(condValue, Type::getDoubleTy(*TheContext),
                                       "intcast");
   }
   condValue = Builder->CreateFCmpONE(
@@ -1133,8 +1185,7 @@ Value *IfStatementAST::codegen() {
 
     TheFunction->insert(TheFunction->end(), MergeBB);
     Builder->SetInsertPoint(MergeBB);
-    PHINode *PN =
-        Builder->CreatePHI(ThenV->getType(), 2, "iftmp");
+    PHINode *PN = Builder->CreatePHI(ThenV->getType(), 2, "iftmp");
     PN->addIncoming(ThenV, ThenBB);
     PN->addIncoming(ElseV, ElseBB);
     return PN;
@@ -1156,6 +1207,13 @@ Value *ReturnStatementAST::codegen() { // TODO: return type
   Value *retVal = nullptr;
   if (expr != nullptr) {
     retVal = expr->codegen();
+  } else {
+    return Builder->CreateRetVoid();
+  }
+
+  if (retVal->getType()->isPointerTy()) {
+    retVal = Builder->CreateLoad(getTypeFromAstType(expr->getReturnType()),
+                                 retVal, "retVal");
   }
 
   return Builder->CreateRet(retVal);
@@ -1245,8 +1303,7 @@ Value *NumberExprAST::codegen() {
 Value *GlobalVariableDefinitionAST::codegen() {
   Type *llvmType = getTypeFromAstType(type);
 
-  auto *gvar = new GlobalVariable(*TheModule, llvmType, false,
-                                  GlobalValue::ExternalLinkage, nullptr, name);
+  auto *gvar = TheModule->getOrInsertGlobal(name, llvmType);
 
   topScope->addIndentifier(name, type, gvar);
 
@@ -1284,9 +1341,9 @@ Value *VariableIndexExprAST::codegen() {
       Builder->CreateIntCast(indexValue, Type::getInt32Ty(*TheContext), true);
 
   // Calculate the element pointer using GEP (GetElementPtr) instruction
-  Value *zero = ConstantInt::get(*TheContext, llvm::APInt(32, 0, true));
-  std::vector<llvm::Value *> indices;
-  indices.push_back(zero);
+  std::vector<Value *> indices;
+  // sub one from index
+  indices.push_back(ConstantInt::get(*TheContext, APInt(32, 0, true)));
   indices.push_back(indexValue);
   Type *elementType;
 
@@ -1311,7 +1368,9 @@ Value *VariableIndexExprAST::codegen() {
     return nullptr;
   }
 
-  Value *elementPtr = Builder->CreateGEP(elementType, varValue, indices);
+  Value *elementPtr = Builder->CreateGEP(
+      elementType, varValue,
+      indices); //  TODO: I dont understand the meaning of indices
 
   return elementPtr;
 }
@@ -1334,6 +1393,9 @@ Function *FunctionDefinitionAST::codegen() {
   BasicBlock *BB = BasicBlock::Create(*TheContext, "entry", TheFunction);
   Builder->SetInsertPoint(BB);
   Body->codegen();
+
+  checkAndInsertVoidReturn(TheFunction);
+
   // Validate the generated code, checking for consistency.
   verifyFunction(*TheFunction);
   // recover scope
@@ -1345,14 +1407,24 @@ Function *FunctionDefinitionAST::codegen() {
   }
   return TheFunction;
 }
+void FunctionDefinitionAST::checkAndInsertVoidReturn(Function *func) {
+  for (Function::iterator b = func->begin(), be = func->end(); b != be; ++b) {
+    BasicBlock *BB = &*b;
+    if (BB->getTerminator() == nullptr) {
+      Builder->SetInsertPoint(BB);
+      if (func->getReturnType()->isVoidTy())
+        Builder->CreateRetVoid();
+      else
+        Builder->CreateRet(Constant::getNullValue(func->getReturnType()));
+    }
+  }
+}
 
-Value *VariableDefinitionAST::codegen() { // TODO: float i = 1; handle type conversion
+Value *
+VariableDefinitionAST::codegen() { // TODO: float i = 1; handle type conversion
   // Create the alloca instruction for the variable
   AllocaInst *allocaInst =
       Builder->CreateAlloca(getTypeFromAstType(type), nullptr, name.c_str());
-
-  // Store the variable in the symbol table
-  currentScope->addIndentifier(name, type, allocaInst);
 
   // If the variable has an initial value, generate code for the
   // expression and store the value in the alloca instruction
@@ -1360,35 +1432,23 @@ Value *VariableDefinitionAST::codegen() { // TODO: float i = 1; handle type conv
     return allocaInst;
   }
 
-  switch (type) {
-  case type_int:
-  case type_double:
-  case type_float:
-  case type_bool:
-  case type_uint:
-    Builder->CreateStore(init->codegen(), allocaInst);
-    break;
-  default:
-    std::unique_ptr<TypeConstructorAST> typeConstructor =
-        std::unique_ptr<TypeConstructorAST>(
-            (TypeConstructorAST *)init.release());
-    auto &exprList = typeConstructor->getArgs();
-    for (int i = 0; i < exprList->getExpressions().size(); i++) {
-      auto &expr = exprList->getExpressions()[i];
-      auto currentIndex = ConstantInt::get(*TheContext, APInt(32, i, true));
-      auto elementPtr = Builder->CreateGEP(Type::getFloatTy(*TheContext),
-                                           allocaInst, currentIndex);
-      Value *value = expr->codegen();
-      // change double or int to float
-      if (value->getType()->isDoubleTy()) {
-        value = Builder->CreateFPTrunc(value, Type::getFloatTy(*TheContext));
-      } else if (value->getType()->isIntegerTy()) {
-        value = ConstantExpr::getSIToFP((ConstantInt *)value,
-                                        Type::getFloatTy(*TheContext));
-      }
-      Builder->CreateStore(value, elementPtr);
-    }
+  Value *initValue = init->codegen();
+
+  if (initValue->getType()->isPointerTy()) {
+    initValue = Builder->CreateLoad(getTypeFromAstType(init->getReturnType()),
+                                    initValue);
   }
+
+  Type *type1 = getTypeFromAstType(type);
+
+  // type is double
+  if (!type1->isDoubleTy() && initValue->getType()->isDoubleTy()) {
+    initValue = doubleTo(type1,initValue);
+  }
+
+  Builder->CreateStore(initValue, allocaInst);
+  // Store the variable in the symbol table
+  currentScope->addIndentifier(name, type, allocaInst);
   return allocaInst;
 }
 
@@ -1409,4 +1469,181 @@ Value *EmptySentenceAST::codegen() {
 
 Value *ExprListAST::codegen() { return nullptr; }
 
-Value *TypeConstructorAST::codegen() { return nullptr; }
+Value *TypeConstructorAST::codegen() {
+  Value *Vec;
+  int index;
+  switch (type) {
+  case type_void:
+    return nullptr;
+  case type_bool:
+  case type_int:
+  case type_float:
+  case type_double:
+    return args->getExpressions()[0]->codegen();
+  case type_vec2:
+    Vec = ConstantAggregateZero::get(
+        VectorType::get(Type::getFloatTy(*TheContext), 2, false));
+    index = 0;
+    for (auto &value : args->getExpressions()) {
+      auto valueCode = value->codegen();
+      if (valueCode->getType()->isDoubleTy()) {
+        valueCode =
+            Builder->CreateFPTrunc(valueCode, Type::getFloatTy(*TheContext));
+      } else if (valueCode->getType()->isIntegerTy()) {
+        valueCode = ConstantExpr::getSIToFP((ConstantInt *)valueCode,
+                                            Type::getFloatTy(*TheContext));
+      } else if (valueCode->getType()->isPointerTy()) {
+        auto elementType = getTypeFromAstType(value->getReturnType());
+        valueCode = Builder->CreateLoad(elementType, valueCode);
+        if (elementType->isIntegerTy()) {
+          valueCode =
+              Builder->CreateSIToFP(valueCode, Type::getFloatTy(*TheContext));
+        } else if (elementType->isDoubleTy()) {
+          valueCode =
+              Builder->CreateFPTrunc(valueCode, Type::getFloatTy(*TheContext));
+        }
+      }
+      Vec = Builder->CreateInsertElement(Vec, valueCode, index);
+      index++;
+    }
+    return Vec;
+  case type_vec3:
+    Vec = ConstantAggregateZero::get(
+        VectorType::get(Type::getFloatTy(*TheContext), 3, false));
+    index = 0;
+    for (auto &value : args->getExpressions()) {
+      auto valueCode = value->codegen();
+      if (valueCode->getType()->isDoubleTy()) {
+        valueCode =
+            Builder->CreateFPTrunc(valueCode, Type::getFloatTy(*TheContext));
+      } else if (valueCode->getType()->isIntegerTy()) {
+        valueCode = ConstantExpr::getSIToFP((ConstantInt *)valueCode,
+                                            Type::getFloatTy(*TheContext));
+      } else if (valueCode->getType()->isPointerTy()) {
+        auto elementType = getTypeFromAstType(value->getReturnType());
+        valueCode = Builder->CreateLoad(elementType, valueCode);
+        if (elementType->isIntegerTy()) {
+          valueCode =
+              Builder->CreateSIToFP(valueCode, Type::getFloatTy(*TheContext));
+        } else if (elementType->isDoubleTy()) {
+          valueCode =
+              Builder->CreateFPTrunc(valueCode, Type::getFloatTy(*TheContext));
+        }
+      }
+      Vec = Builder->CreateInsertElement(Vec, valueCode, index);
+      index++;
+    }
+    return Vec;
+  case type_vec4:
+    Vec = ConstantAggregateZero::get(
+        VectorType::get(Type::getFloatTy(*TheContext), 4, false));
+    index = 0;
+    for (auto &value : args->getExpressions()) {
+      auto valueCode = value->codegen();
+      if (valueCode->getType()->isDoubleTy()) {
+        valueCode =
+            Builder->CreateFPTrunc(valueCode, Type::getFloatTy(*TheContext));
+      } else if (valueCode->getType()->isIntegerTy()) {
+        valueCode = ConstantExpr::getSIToFP((ConstantInt *)valueCode,
+                                            Type::getFloatTy(*TheContext));
+      } else if (valueCode->getType()->isPointerTy()) {
+        auto elementType = getTypeFromAstType(value->getReturnType());
+        valueCode = Builder->CreateLoad(elementType, valueCode);
+        if (elementType->isIntegerTy()) {
+          valueCode =
+              Builder->CreateSIToFP(valueCode, Type::getFloatTy(*TheContext));
+        } else if (elementType->isDoubleTy()) {
+          valueCode =
+              Builder->CreateFPTrunc(valueCode, Type::getFloatTy(*TheContext));
+        }
+      }
+      Vec = Builder->CreateInsertElement(Vec, valueCode, index);
+      index++;
+    }
+    return Vec;
+  case type_mat2:
+    Vec = ConstantAggregateZero::get(
+        VectorType::get(Type::getFloatTy(*TheContext), 4, false));
+    index = 0;
+    for (auto &value : args->getExpressions()) {
+      auto valueCode = value->codegen();
+      if (valueCode->getType()->isDoubleTy()) {
+        valueCode =
+            Builder->CreateFPTrunc(valueCode, Type::getFloatTy(*TheContext));
+      } else if (valueCode->getType()->isIntegerTy()) {
+        valueCode = ConstantExpr::getSIToFP((ConstantInt *)valueCode,
+                                            Type::getFloatTy(*TheContext));
+      } else if (valueCode->getType()->isPointerTy()) {
+        auto elementType = getTypeFromAstType(value->getReturnType());
+        valueCode = Builder->CreateLoad(elementType, valueCode);
+        if (elementType->isIntegerTy()) {
+          valueCode =
+              Builder->CreateSIToFP(valueCode, Type::getFloatTy(*TheContext));
+        } else if (elementType->isDoubleTy()) {
+          valueCode =
+              Builder->CreateFPTrunc(valueCode, Type::getFloatTy(*TheContext));
+        }
+      }
+      Vec = Builder->CreateInsertElement(Vec, valueCode, index);
+    }
+    index++;
+    return Vec;
+  case type_mat3:
+    Vec = ConstantAggregateZero::get(
+        VectorType::get(Type::getFloatTy(*TheContext), 9, false));
+    index = 0;
+    for (auto &value : args->getExpressions()) {
+      auto valueCode = value->codegen();
+      if (valueCode->getType()->isDoubleTy()) {
+        valueCode =
+            Builder->CreateFPTrunc(valueCode, Type::getFloatTy(*TheContext));
+      } else if (valueCode->getType()->isIntegerTy()) {
+        valueCode = ConstantExpr::getSIToFP((ConstantInt *)valueCode,
+                                            Type::getFloatTy(*TheContext));
+      } else if (valueCode->getType()->isPointerTy()) {
+        auto elementType = getTypeFromAstType(value->getReturnType());
+        valueCode = Builder->CreateLoad(elementType, valueCode);
+        if (elementType->isIntegerTy()) {
+          valueCode =
+              Builder->CreateSIToFP(valueCode, Type::getFloatTy(*TheContext));
+        } else if (elementType->isDoubleTy()) {
+          valueCode =
+              Builder->CreateFPTrunc(valueCode, Type::getFloatTy(*TheContext));
+        }
+      }
+      Vec = Builder->CreateInsertElement(Vec, valueCode, index);
+      index++;
+    }
+    return Vec;
+  case type_mat4:
+    Vec = ConstantAggregateZero::get(
+        VectorType::get(Type::getFloatTy(*TheContext), 16, false));
+    index = 0;
+    for (auto &value : args->getExpressions()) {
+      auto valueCode = value->codegen();
+      if (valueCode->getType()->isDoubleTy()) {
+        valueCode =
+            Builder->CreateFPTrunc(valueCode, Type::getFloatTy(*TheContext));
+      } else if (valueCode->getType()->isIntegerTy()) {
+        valueCode = ConstantExpr::getSIToFP((ConstantInt *)valueCode,
+                                            Type::getFloatTy(*TheContext));
+      } else if (valueCode->getType()->isPointerTy()) {
+        // get the element type of the pointer
+        auto elementType = getTypeFromAstType(value->getReturnType());
+        valueCode = Builder->CreateLoad(elementType, valueCode);
+        if (elementType->isIntegerTy()) {
+          valueCode =
+              Builder->CreateSIToFP(valueCode, Type::getFloatTy(*TheContext));
+        } else if (elementType->isDoubleTy()) {
+          valueCode =
+              Builder->CreateFPTrunc(valueCode, Type::getFloatTy(*TheContext));
+        }
+      }
+      Vec = Builder->CreateInsertElement(Vec, valueCode, index);
+      index++;
+    }
+    return Vec;
+  case type_error:
+    break;
+  }
+}

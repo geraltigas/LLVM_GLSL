@@ -1,8 +1,3 @@
-//
-// Created by jb030 on 12/05/2023.
-//
-
-
 #ifndef LLVM_TOKENIZER_H
 
 #include "global.h"

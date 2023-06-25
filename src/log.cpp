@@ -1,7 +1,3 @@
-//
-// Created by jb030 on 13/05/2023.
-//
-
 #include "log.h"
 #include <iostream>
 #include <memory>

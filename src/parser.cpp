@@ -1,7 +1,3 @@
-//
-// Created by jb030 on 13/05/2023.
-//
-
 #include "parser.h"
 #include "ast.h"
 #include "global.h"
@@ -475,10 +471,11 @@ std::unique_ptr<ExprListAST> ParseExprList() {
     expr_list.push_back(std::move(expression));
   }
 
-//  if (expr_list.size() == 1) {
-//    return std::make_unique<ExprListAST>(std::move(
-//        ((SequenceExpressionAST *)(expr_list[0].release()))->getExpressions()));
-//  }
+  //  if (expr_list.size() == 1) {
+  //    return std::make_unique<ExprListAST>(std::move(
+  //        ((SequenceExpressionAST
+  //        *)(expr_list[0].release()))->getExpressions()));
+  //  }
 
   return std::make_unique<ExprListAST>(std::move(expr_list));
 }
@@ -1477,6 +1474,8 @@ std::unique_ptr<FunctionDefinitionAST> ParseFunctionDefinition() {
     return nullptr;
   }
 
+  index_temp++;
+
   // parse parameters
   while (true) {
 
@@ -1486,7 +1485,6 @@ std::unique_ptr<FunctionDefinitionAST> ParseFunctionDefinition() {
     }
     // record
     index_record = index_temp;
-    index_temp++;
     TokenType tokenType = tokens[index_temp].type;
     // parse
     AstType type = ParseType();
@@ -1554,10 +1552,26 @@ std::unique_ptr<FunctionDefinitionAST> ParseFunctionDefinition() {
   }
   index_temp++;
 
+  // check return
+//  bool hasReturn = false;
+//  if (returnType == type_void) {
+//    for (auto &sentence : body->getSentences()) {
+//      if (sentence->isReturn()) {
+//        hasReturn = true;
+//        break;
+//      }
+//    }
+//  }
+//
+//  if (!hasReturn) {
+//    body->getSentences().push_back(std::make_unique<ReturnStatementAST>());
+//    body->getSentences().push_back(std::make_unique<ReturnStatementAST>());
+//  }
+
   return std::make_unique<FunctionDefinitionAST>(
       returnType, std::string(name->c_str()), std::move(parameters),
       std::move(body));
-};
+}
 
 int ParseVersion() {
   int version = -1;
